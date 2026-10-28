@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-oss-120b"  # Groq's replacement for the retired llama-3.3-70b-versatile
 
     # --- Higgsfield (images + video: Soul, Kling, Seedance, PixVerse...) ---
+    # Either the single value the console's "Copy API key" gives ("<id>:<secret>") or the two parts.
+    hf_api_key: str = ""
     hf_api_key_id: str = ""
     hf_api_key_secret: str = ""
     hf_base_url: str = "https://api.higgsfield.ai"
@@ -53,6 +55,19 @@ class Settings(BaseSettings):
     ig_access_token: str = ""  # long-lived token; refreshed automatically and stored in the DB
     ig_graph_base_url: str = "https://graph.instagram.com"
     ig_graph_version: str = ""  # e.g. "v23.0"; empty = unversioned path
+
+    @model_validator(mode="after")
+    def _split_hf_key(self) -> Settings:
+        key = self.hf_api_key.strip()
+        if key and not (self.hf_api_key_id and self.hf_api_key_secret):
+            if ":" not in key:
+                raise ValueError(
+                    "HF_API_KEY must look like <key id>:<key secret> (as the Higgsfield console's "
+                    "'Copy API key' button gives it); set HF_API_KEY_ID and HF_API_KEY_SECRET instead "
+                    "if your console shows them separately"
+                )
+            self.hf_api_key_id, self.hf_api_key_secret = (p.strip() for p in key.split(":", 1))
+        return self
 
     @property
     def db_path(self) -> Path:
