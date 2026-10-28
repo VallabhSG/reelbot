@@ -1,0 +1,127 @@
+# EVERYDAY BOSS FIGHTS — @everydaybossfights
+# Ordinary life problems, animated like a shonen final-boss battle, with an anticlimax twist.
+
+series:
+  name: "EVERYDAY BOSS FIGHTS"
+  handle: "everydaybossfights"
+  premise: >
+    Every episode, Juno fights one tiny everyday problem as if it were the final boss of an
+    anime: the last metro, a 2% phone battery, a pickle jar that will not open. Three beats, always:
+    SHOT 1 the ordinary moment and the stakes (calm, relatable, slightly tense);
+    SHOT 2 the boss fight: the mundane task shown as an epic shonen battle with power aura, speed
+    lines, debris, dramatic low angles and impact-frame energy;
+    SHOT 3 the anticlimax: a deadpan, funny twist that undercuts the epic (often Mochi the cat, or
+    the problem solving itself in the dumbest way). Wordless, no on-screen text. Universal, not
+    tied to one country. Wholesome humour; never cruel, never romantic.
+  total_episodes: 100
+  header_template: "{series}\nBoss {n} / {total}\n{emoji} {category}"
+
+style:
+  bible: >
+    2D Japanese anime film still, clean bold ink linework, cel shading, vibrant saturated colors,
+    cinematic lighting with warm rim light, detailed modern city setting, expressive faces,
+    vertical 9:16 composition, high detail, consistent character design
+  negative: "text, letters, watermark, logo, signature, extra fingers, deformed hands, extra limbs, blurry, low quality, 3D render, photorealistic"
+  motion_suffix: "anime style motion, smooth dynamic camera, consistent character design, no cuts"
+
+characters:
+  - name: Juno
+    description: >
+      Juno, a 20-something young woman with a short messy teal bob haircut, a small band-aid on her
+      left cheek, an oversized mustard-yellow hoodie, black cargo shorts and chunky white high-top
+      sneakers; determined amber eyes
+    reference_images: []   # add after launch: pick the best Juno frames, used by Seedance later
+  - name: Mochi
+    description: "Mochi, a chubby orange tabby cat with a tiny red scarf and an unimpressed expression"
+    reference_images: []
+
+# Episode N uses entry N. Past the end, the planner invents new bosses in the same spirit.
+episodes:
+  - {category: "Last Metro", emoji: "🚇", idea: "doors closing, she slides through like a stolen base; twist: it's going the wrong way"}
+  - {category: "2% Battery", emoji: "🔋", idea: "she sprints across the house to the charger like it's a sacred relic; twist: the cable is too short, she ends up lying on the floor"}
+  - {category: "Snooze Button", emoji: "⏰", idea: "6:00 AM alarm duel, her hand charges with energy for the snooze strike; twist: it's Sunday"}
+  - {category: "One Trip", emoji: "🛍️", idea: "carrying every grocery bag in one trip, arms glowing with power; twist: her keys are in the pocket under all the bags"}
+  - {category: "Pickle Jar", emoji: "🫙", idea: "jar lid boss, she strains with full power aura; twist: Mochi taps it and it opens"}
+  - {category: "Mosquito, 3 AM", emoji: "🦟", idea: "dark bedroom, epic two-handed clap attack in slow motion; twist: it's sitting on her nose"}
+  - {category: "Closing Elevator", emoji: "🛗", idea: "doors closing, she dives in a heroic leap; twist: someone just holds the door and she lands at their feet"}
+  - {category: "Last Slice", emoji: "🍕", idea: "standoff over the last pizza slice; twist: Mochi already ate it"}
+  - {category: "Umbrella vs Wind", emoji: "☔", idea: "monsoon storm battle with an umbrella; twist: it flips inside out and she gets carried off like a kite"}
+  - {category: "Flat-Pack Furniture", emoji: "🪑", idea: "the instruction manual as an ancient scroll, she assembles at god speed; twist: one screw left over"}
+  - {category: "Instant Noodles", emoji: "🍜", idea: "guarding a 3-minute timer like a bomb countdown; twist: she forgot the flavor packet"}
+  - {category: "One Bar of Wi-Fi", emoji: "📶", idea: "climbing onto the rooftop holding her phone to the sky; twist: the message finally sends: a thumbs up"}
+  - {category: "Wet Floor", emoji: "🧽", idea: "slides across a freshly mopped floor like a figure skater; twist: lands perfectly, then the sign falls on her"}
+  - {category: "Tiny Spider", emoji: "🕷️", idea: "broom raised like a legendary sword against a tiny spider; twist: the spider waves back and she gives up"}
+  - {category: "Melting Ice Cream", emoji: "🍦", idea: "race against the summer sun to finish the cone; twist: the scoop falls, Mochi is waiting below"}
+  - {category: "Monday Morning", emoji: "📅", idea: "Monday as a giant shadow kaiju over the city; twist: she defeats it and it splits into Tuesday"}
+  - {category: "Exam Clock", emoji: "✏️", idea: "last minute of the exam, writing at light speed; twist: she forgot to write her name"}
+  - {category: "Laundry Mountain", emoji: "🧺", idea: "folding a laundry tower with martial-arts precision; twist: Mochi dives into the tower"}
+  - {category: "Flash Sale", emoji: "⏳", idea: "checkout countdown 3, 2, 1, she taps buy; twist: sold out"}
+  - {category: "Lost Earbud", emoji: "🎧", idea: "searching the whole room like a detective with a flashlight; twist: it was in her ear all along"}
+  - {category: "Six Cups of Chai", emoji: "☕", idea: "carrying a full tray of tea glasses through a crowded street with perfect balance; twist: she sneezes"}
+  - {category: "Holding a Sneeze", emoji: "🤧", idea: "silent library, she fights a sneeze with all her willpower; twist: Mochi sneezes instead"}
+  - {category: "Tangled Cable", emoji: "🔌", idea: "untangling earphones like defusing a bomb; twist: it re-tangles instantly in her pocket"}
+  - {category: "First Sip", emoji: "🔥", idea: "blowing on a scalding coffee like summoning wind; twist: still burns her tongue"}
+  - {category: "Green Light", emoji: "🚦", idea: "sprinting for the crossing before it turns red, full speed lines; twist: she makes it, it was a different crossing"}
+  - {category: "Guests in 5 Minutes", emoji: "🧹", idea: "cleaning the whole room at god speed by throwing everything in the closet; twist: the closet bursts open as the door opens"}
+  - {category: "3 AM Scroll", emoji: "🌙", idea: "fighting the urge to keep scrolling in bed, phone glowing like a demon; twist: the sun rises"}
+  - {category: "Parallel Parking", emoji: "🛵", idea: "squeezing a scooter into a tiny gap with surgical precision; twist: the car in front drives away"}
+  - {category: "Fitted Bedsheet", emoji: "🛏️", idea: "wrestling a fitted sheet like a sea serpent; twist: she gives up and naps under it"}
+  - {category: "The Last Stair", emoji: "🪜", idea: "carrying a heavy box up endless stairs like climbing a mountain; twist: the elevator dings open beside her"}
+
+shots:
+  count: 3          # setup / boss fight / twist, 3 x 5s = 15s
+  duration_s: 5
+
+# Model blocks verified against open.higgsfield.ai (Oct 2026). See series/example.yaml for notes.
+models:
+  image:
+    endpoint: "higgsfield-ai/soul/v2/standard"
+    input:
+      prompt: "{prompt}"
+      aspect_ratio: "{aspect_ratio}"
+      resolution: "720p"
+      batch_size: 1
+      enhance_prompt: true
+    output_path: "images.0.url"
+    cost_per_call: 0.0032
+  video:
+    endpoint: "kling-video/v2.5-turbo/standard/image-to-video"
+    input:
+      prompt: "{prompt}"
+      image_url: "{image_url}"
+      duration: "{duration}"
+      cfg_scale: 0.5
+      negative_prompt: "{negative_prompt}"
+    output_path: "video.url"
+    cost_per_second: 0.042   # list price; currently billed at $0.021 (promo)
+
+music:
+  provider: elevenlabs
+  library_dir: assets/music
+  cost_per_track: 0.0
+  volume_db: -2.0
+
+title_card:
+  font: assets/fonts/Bangers-Regular.ttf   # SIL OFL 1.1, see Bangers-OFL.txt
+  subtitle: "BOSS FIGHT #{nn}"
+  show_from: 0.2
+  show_until: 2.6
+  color: "#FFC93C"          # brand mustard yellow, matches Juno's hoodie
+  stroke_color: "#14110F"
+  stroke_width: 10
+  y_ratio: 0.70
+  cover_offset_ms: 1200
+
+caption:
+  template: "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
+  credits: "Animated with Kling on Higgsfield · music by @elevenlabs"
+  hashtags: ["#aianimation", "#anime", "#relatable", "#bossfight", "#aishortfilm", "#aigenerated"]
+
+budget:
+  monthly_usd: 40
+  per_reel_usd: 2.5
+
+schedule:
+  generate_at: "10:00"
+  publish_at: "19:30"
+  days: [mon, tue, wed, thu, fri, sat, sun]

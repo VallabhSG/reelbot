@@ -8,6 +8,7 @@ data/
 dist/
 *.egg-info/
 assets/fonts/*.ttf
+!assets/fonts/Bangers-Regular.ttf
 assets/fonts/*.otf
 assets/music/*
 !assets/music/.gitkeep

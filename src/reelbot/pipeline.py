@@ -154,9 +154,9 @@ class Pipeline:
         durations = [min(probe_duration(c), float(self.s.shots.duration_s)) for c in clips]
         tc = self.s.title_card
         font = self.s.resolve(tc.font) if tc.font else None
-        title_png = render_title_card(
-            plan.title, tc.subtitle.format(handle=self.s.series.handle), tc, font, d / "title.png"
-        )
+        episode_no = self.db.get_job(job_id)["episode_no"]
+        subtitle = tc.subtitle.format(handle=self.s.series.handle, n=episode_no, nn=f"{episode_no:02d}")
+        title_png = render_title_card(plan.title, subtitle, tc, font, d / "title.png")
         out = assemble(
             AssemblyPlan(clips, durations, title_png, tc, music, self.s.music.volume_db, d / "final.mp4")
         )

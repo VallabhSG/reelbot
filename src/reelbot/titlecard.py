@@ -49,7 +49,7 @@ def render_title_card(title: str, subtitle: str, spec: TitleCard, font_path: Pat
         stroke_fill=spec.stroke_color,
     )
     _, top, _, bottom = d.textbbox((W // 2, cy), title, font=title_font, anchor="mm")
-    sub_font = _font(font_path, 34)
+    sub_font = _font(font_path, 46)
     spaced = " ".join(subtitle.upper())  # cheap letter-spacing
     d.text(
         (W // 2, bottom + 60),
