@@ -72,6 +72,21 @@ def test_bad_terminal_status_raises(status):
     with pytest.raises(HiggsfieldError) as e:
         client().run("m", {})
     assert e.value.status == status
+    assert "(no reason given)" in str(e.value)
+
+
+@respx.mock
+def test_failure_reason_reaches_the_error():
+    respx.post(f"{BASE}/m").mock(
+        return_value=httpx.Response(200, json={"status": "queued", "request_id": "r"})
+    )
+    respx.get(f"{BASE}/requests/r/status").mock(
+        return_value=httpx.Response(
+            200, json={"status": "failed", "request_id": "r", "error": "content policy: reference image"}
+        )
+    )
+    with pytest.raises(HiggsfieldError, match="content policy: reference image"):
+        client().run("m", {})
 
 
 @respx.mock

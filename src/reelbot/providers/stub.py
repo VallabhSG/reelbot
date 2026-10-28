@@ -161,6 +161,14 @@ class StubLLM:
     def json_chat(self, system: str, user: str, temperature: float = 0.9) -> dict[str, Any]:
         from ..storyboard import default_beats
 
+        if "FIRST-TIME VIEWER" in system:  # the story critic
+            return {
+                "summary": "she makes the train, the cat was faster",
+                "confusions": [],
+                "clear": True,
+                "score": 9,
+            }
+
         n_shots = json.loads(user.split("SHOT_COUNT_JSON=")[1].split("\n")[0])
         beats = default_beats(n_shots)
         talks = "DIALOGUE BOOKENDS" in system

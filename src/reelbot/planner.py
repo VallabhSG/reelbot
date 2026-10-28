@@ -69,6 +69,21 @@ DIALOGUE_BOOKENDS = """- DIALOGUE BOOKENDS (the format of the most-watched reels
   speaker: who says it, a character IN that shot who can talk: {speakers}. {mute}
   Lines must work for any viewer; the pictures still carry the story."""
 
+CRITIC_PASS = 7
+CRITIC_SYSTEM = """You are a FIRST-TIME VIEWER scrolling Instagram Reels with the sound off. You will
+only see what is listed: the opening frame and each shot's picture (plus subtitles for any spoken
+line). You know nothing else about the story.
+
+Answer honestly, as a viewer, not as a writer:
+- summary: one sentence, what happened and what the joke was.
+- confusions: anything you could not understand from the pictures: an action you can't picture,
+  an object or power that appears from nowhere, a cut where you lose track of who/where, a
+  punchline that doesn't land. Empty list if none.
+- clear: true only if you could retell the cause, the decisive action and the punchline.
+- score: 1-10 clarity.
+
+JSON only: {"summary": str, "confusions": [str], "clear": bool, "score": int}"""
+
 SYSTEM_TAKE = """You are the director of an anime micro-film series for Instagram Reels.
 Each episode is ONE continuous {seconds}-second scene in exactly {n} shots with hard cuts, rendered
 in a single generation, then cut to music. No narration and no on-screen text.
@@ -121,6 +136,12 @@ STORYBOARD RULES
   "whip pan", "slow-motion speed ramp" (climax only).
 - action: ONE action with a concrete verb and a visible end state, max 25 words. Refer to cast by
   name only. No dialogue, no thoughts, no text, no signs.
+- Every action must be literally drawable: a physical action with visible objects. Never abstract
+  verbs (hack, outsmart, decide, realise, plan, figure out) and never a prop, gadget or power that
+  wasn't visible earlier: anything that matters appears in the opening frame or an earlier shot.
+- Every shot shows the main character or the one prop that matters. No empty shots of doors,
+  trains or backgrounds.
+- The story must read with the sound off; spoken lines only add flavour.
 - sound: the one diegetic sound of the shot (footsteps on wet tiles, door seal hiss, cloth whoosh).
   Never speech, never music.
 {dialogue}
@@ -196,18 +217,63 @@ class Planner:
         ]
         if seed:
             lines.append(f"Planned category: {seed.emoji} {seed.category}".strip())
-            if seed.idea:
+            if seed.scripted:
+                lines += [
+                    "FIXED STORY: follow it exactly. Your job is shots, camera, timing, end states and "
+                    "sound, not a new story. Keep every spoken line as written.",
+                    *([f"- Location: {seed.location}"] if seed.location else []),
+                    f"- Stake (hook/escalate): {seed.stake}",
+                    f"- Winning move (climax): {seed.move}",
+                    *([f"- Spectacle (clash/climax): {seed.spectacle}"] if seed.spectacle else []),
+                    f"- Payoff (twist, the last image): {seed.payoff}",
+                ]
+            elif seed.idea:
                 lines.append(f"Idea to build on: {seed.idea}")
         else:
             lines.append("No category planned: pick a fresh one that fits the premise.")
+        film_rule = (
+            "Borrow its camera language, framing and timing only. Never name the film in any field, "
+            "never copy its characters, costumes, props, logos, lines or music."
+        )
+        if seed and seed.homage:
+            lines.append(f"- Homage: stage it like {seed.homage}. {film_rule}")
+        elif s.take.enabled and s.homages:
+            lines.append(
+                "- Homage: pick the ONE famous movie moment below that fits this gag best and stage the "
+                f"climax like it. {film_rule} Options: " + "; ".join(s.homages)
+            )
         if past_titles:
             lines.append("Already used (do not repeat titles or premises): " + "; ".join(past_titles))
         if feedback:
             lines.append(f"Your previous answer broke these rules: {feedback}. Fix them and answer again.")
         return "\n".join(lines)
 
+    def critique(self, plan: EpisodePlan) -> tuple[int, str]:
+        """A first-time viewer reads only what is on screen (shots + spoken lines) and says what
+        happened. Returns (score 1-10, feedback for the director; empty when it's clear)."""
+        shots = "\n".join(
+            f"{i}. ({s.seconds}s, {s.size}) {s.action}" + (f' {s.speaker}: "{s.line}"' if s.line else "")
+            for i, s in enumerate(plan.shots, 1)
+        )
+        user = f"OPENING FRAME: {plan.opening_frame}\nSHOTS:\n{shots}"
+        try:
+            v = self.llm.json_chat(CRITIC_SYSTEM, user, temperature=0.2)
+            score = int(v.get("score", 0))
+        except Exception as e:  # the critic is a quality gate, never a single point of failure
+            log.warning("story critic unavailable: %s", e)
+            return 10, ""
+        confusions = [str(c) for c in v.get("confusions") or []][:4]
+        if v.get("clear") and score >= CRITIC_PASS and not confusions:
+            return score, ""
+        return score, (
+            f'a first-time viewer understood it as: "{v.get("summary", "")}" (clarity {score}/10). '
+            f"Confusing: {'; '.join(confusions) or 'the cause, the winning move or the punchline'}. "
+            "Make cause -> winning move -> payoff literal and visible with the sound off"
+        )
+
     def plan(self, episode_no: int, past_titles: list[str]) -> EpisodePlan:
         feedback = ""
+        best: tuple[int, EpisodePlan] | None = None
         for attempt in range(1, self.max_attempts + 1):
             raw = self.llm.json_chat(
                 self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback)
@@ -229,5 +295,15 @@ class Planner:
             )
             if seed:  # the calendar wins over the model for category/emoji
                 plan.category, plan.emoji = seed.category, seed.emoji or plan.emoji
-            return plan
+            if not self.series.take.enabled:
+                return plan
+            score, feedback = self.critique(plan)
+            if not feedback:
+                return plan
+            log.warning("plan attempt %d unclear to a viewer (%d/10): %s", attempt, score, feedback)
+            if best is None or score > best[0]:
+                best = (score, plan)
+        if best:  # never block the day on the critic: ship the clearest valid storyboard
+            log.warning("no storyboard passed the viewer check; using the clearest (%d/10)", best[0])
+            return best[1]
         raise RuntimeError(f"planner failed after {self.max_attempts} attempts: {feedback}")

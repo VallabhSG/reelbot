@@ -181,3 +181,44 @@ def test_snap_moves_planned_cut_to_the_real_one():
 
     assert snap(9.0, [2.1, 8.6, 12.0]) == 8.6
     assert snap(9.0, [2.1, 12.0]) == 9.0  # nothing near: keep the plan
+
+
+@needs_ffmpeg
+def test_reference_video_goes_only_to_models_that_take_one(dry_settings, take_series):
+    take_series.models.takes["seedance2"].input["video_urls"] = "{video_urls}"
+    take_series.episodes[0].reference_video = "https://example.com/clip.mp4"
+    app = _app(dry_settings, take_series)
+    app.pipeline.bakeoff()
+    kling, seed = _calls(app.pipeline, "take")
+    assert kling["video_urls"] == [] and not kling["prompt"].startswith("Use video 1")
+    assert seed["video_urls"] == ["https://example.com/clip.mp4"]
+    assert seed["prompt"].startswith("Use video 1 as the motion, timing and camera reference only")
+
+
+def test_rejected_drafts_do_not_count_as_used_premises(db):
+    from reelbot.models import EpisodePlan
+
+    plan = EpisodePlan.model_validate(
+        {
+            "title": "metro dash",
+            "category": "Last Metro",
+            "logline": "l",
+            "hook": "h",
+            "music_prompt": "m",
+            "location": {"name": "platform", "plate_prompt": "an empty metro platform at night"},
+            "shots": [
+                {
+                    "beat": "hook",
+                    "size": "WS",
+                    "angle": "eye level",
+                    "camera": "static",
+                    "action": "the doors begin to close",
+                    "light": "cold key",
+                }
+            ],
+        }
+    )
+    a, b = db.create_job(1, plan), db.create_job(1, plan)
+    db.update_job(a, status=JobStatus.REJECTED)
+    db.update_job(b, status=JobStatus.PUBLISHED)
+    assert db.past_titles() == ["METRO DASH (Last Metro)"]

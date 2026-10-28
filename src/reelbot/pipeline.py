@@ -381,6 +381,10 @@ class Pipeline:
         self.db.kv_set(f"keyframe:{job_id}", url)
         return url
 
+    def _seed(self, job_id: int):
+        n = self.db.get_job(job_id)["episode_no"]
+        return self.s.episodes[n - 1] if 0 < n <= len(self.s.episodes) else None
+
     def _render_take(self, job_id: int, plan: EpisodePlan) -> Path:
         name = self.take_model_for(job_id)
         spec = self.s.models.takes[name]
@@ -392,6 +396,14 @@ class Pipeline:
             for r in tp.roles
         ]
         prompt = tp.prompt
+        video_refs: list[str] = []
+        seed = self._seed(job_id)
+        if seed and seed.reference_video and "{video_urls}" in json.dumps(spec.input):
+            video_refs = [seed.reference_video]
+            prompt = (
+                "Use video 1 as the motion, timing and camera reference only; keep our characters, "
+                "location and style.\n" + prompt
+            )
         seconds = sum(s.seconds for s in plan.shots)
         url = self.media.take(
             name,
@@ -399,6 +411,7 @@ class Pipeline:
                 "prompt": prompt,
                 "prompt_global": tp.global_prompt,
                 "image_urls": refs,
+                "video_urls": video_refs,
                 "start_image": keyframe or refs[0],
                 "shots": tp.shots,
                 "duration": seconds,

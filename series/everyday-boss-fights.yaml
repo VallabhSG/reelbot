@@ -44,22 +44,95 @@ cast:
   aspect_ratio: "16:9" # turnaround sheets read best wide
 
 
-# Episode N uses entry N. Past the end, the planner invents new bosses in the same spirit.
+# Episode N uses entry N. Scripted entries are fixed gags the planner must follow (it only adds
+# shots, camera, timing and sound): one literal cause -> the feeling blown up into spectacle -> one
+# payoff image that works with the sound off. Unscripted entries are ideas; past the end of the
+# list the planner invents new bosses in the same spirit (and a story critic checks they read).
 episodes:
-  - {category: "Last Metro", emoji: "🚇", idea: "doors closing, she slides through like a stolen base; twist: it's going the wrong way"}
-  - {category: "2% Battery", emoji: "🔋", idea: "she sprints across the house to the charger like it's a sacred relic; twist: the cable is too short, she ends up lying on the floor"}
+  - category: "Last Metro"
+    emoji: "🚇"
+    location: "an underground metro platform at rush hour, train waiting with its doors open"
+    stake: 'The door chime rings and the doors begin to close; Juno, phone to her ear, says "Two minutes, I swear!"'
+    move: "Juno sprints the length of the platform and dives feet-first through the closing doors like a baseball slide"
+    spectacle: "her sprint blasts a storm of newspapers into the air, sparks trail from her sneakers on the tiles, the doors slam shut a finger-width behind her heels in slow motion"
+    payoff: 'inside the carriage, gasping on the floor, Juno looks up: Mochi is already sitting on the seat opposite, unimpressed; Juno says "...How?"'
+    homage: "the classic adventure-movie slide under a closing stone door at the very last second, reaching back as it slams"
+  - category: "2% Battery"
+    emoji: "🔋"
+    location: "a cosy small apartment living room in the evening, sofa, lamp, charger cable plugged into the far wall"
+    stake: 'Juno is on a video call on the sofa when her phone flashes a big red empty-battery icon; she says "No, no, no, not now!"'
+    move: "Juno launches herself over the back of the sofa and lunges for the charger cable on the far wall"
+    spectacle: "slow-motion leap with speed lines, cushions and popcorn exploding into the air, the lamp swinging wildly"
+    payoff: "the cable is too short: Juno lies stretched flat on the floor holding the phone up at full arm's length, and Mochi sits down on her back"
+    homage: "a heist-movie vault dive in slow motion over a laser grid"
+  - category: "Pickle Jar"
+    emoji: "🫙"
+    location: "a small bright kitchen, a big glass pickle jar on the counter"
+    stake: 'Juno grips the pickle jar with both hands; the lid will not budge; she says "You. Will. Open."'
+    move: "Juno braces a foot against the counter and twists the lid with everything she has"
+    spectacle: "a golden power aura flares around her, the kitchen lights flicker, cutlery rattles, the floor tiles crack under her feet, her face turns red"
+    payoff: "the lid still won't move; Mochi hops onto the counter, taps the lid once with a paw and it pops off; Juno stares, frozen"
+    homage: "a shonen anime power-up: screaming, a blazing aura, the ground cracking, rocks floating"
+  - category: "Mosquito, 3 AM"
+    emoji: "🦟"
+    location: "a dark bedroom at 3 AM, moonlight through curtains, Juno in bed, Mochi asleep on the pillow"
+    stake: "a mosquito whines past Juno's ear; her eyes snap open in the dark, glowing with focus"
+    move: "Juno tracks the mosquito and claps both hands together in one perfect strike"
+    spectacle: "slow-motion clap, a shockwave blows the curtains open and knocks books off the shelf, moonlight floods the room"
+    payoff: "Juno slowly opens her palms: empty. Extreme close-up: the mosquito sits calmly on the tip of her nose. Mochi watches from the pillow"
+    homage: "a sci-fi bullet-time moment: everything freezes and the camera sweeps 360 degrees around the strike"
+  - category: "Closing Elevator"
+    emoji: "🛗"
+    location: "a sunny office lobby with an elevator at the far end, its doors open"
+    stake: 'The elevator doors start closing across the lobby; Juno, a full coffee cup in hand, shouts "Hold the door!"'
+    move: "Juno sprints and leaps the last ten metres in a superhero dive, coffee held high"
+    spectacle: "slow-motion flight across the lobby, papers swirling behind her, not a drop of coffee spilling"
+    payoff: "the doors simply stop: Mochi, already inside, has a paw on the door; Juno lands flat at his feet, coffee perfect; she says \"...Thanks.\""
+    homage: "a classic superhero flight shot: one fist forward, cape-like hoodie flapping, city-skyline energy"
+  - category: "Last Slice"
+    emoji: "🍕"
+    location: "a living room at night, a pizza box with one slice left on the coffee table between Juno and Mochi on the sofa"
+    stake: "one slice left; Juno and Mochi lock eyes over the open pizza box"
+    move: "Juno slowly reaches for the slice like a gunslinger reaching for a holster, then lunges and grabs it"
+    spectacle: "western-duel close-ups of eyes and paws, a popcorn tumbleweed rolls across the table, a clock ticks, wind blows her hair indoors"
+    payoff: "Juno holds up her prize: it's only the crust. Mochi licks his whiskers, cheese on his red scarf"
+    homage: "a spaghetti-western standoff: extreme close-ups of narrowed eyes, twitching fingers, a long silent hold"
+  - category: "Umbrella vs Wind"
+    emoji: "☔"
+    location: "a street corner in a monsoon storm, a café window behind"
+    stake: 'a huge gust hits as Juno opens her umbrella at the crossing; she says "Not today."'
+    move: "Juno plants her feet and holds the umbrella into the storm like a shield"
+    spectacle: "the wind hits like an anime boss attack, rain flying sideways, signs rattling, her sneakers sliding backwards with sparks"
+    payoff: "the umbrella flips inside out and lifts Juno off the ground like a kite; she floats past the café window where Mochi sits, dry, sipping from a saucer"
+    homage: "a storm-battle climax in a fantasy epic, ending like a nanny floating away on her umbrella over the rooftops"
+  - category: "Instant Noodles"
+    emoji: "🍜"
+    location: "a small kitchen counter at night, a cup of instant noodles and a kitchen timer"
+    stake: 'Juno pours boiling water into the noodle cup and starts a 3-minute timer; she says "Three minutes. Don''t blink."'
+    move: "Juno stands guard over the cup in a battle stance, chopsticks drawn like twin swords"
+    spectacle: "dramatic close-ups of the ticking timer, steam curling up like a dragon, lightning flashing behind her"
+    payoff: "the timer rings; Juno peels the lid back and finds the flavour packet still sealed on top of the noodles; Mochi slowly blinks"
+    homage: "a bomb-defusal thriller countdown: sweat, ticking close-ups, red light"
+  - category: "Wet Floor"
+    emoji: "🧽"
+    location: "a shiny freshly mopped shopping-mall corridor with a yellow wet-floor sign"
+    stake: "Juno hurries round the corner onto the freshly mopped floor, past the yellow wet-floor sign"
+    move: "Juno slips and turns it into a perfect figure-skating spin"
+    spectacle: "sparkles and slow motion, a triple spin, water spraying in glittering arcs, spotlights from nowhere"
+    payoff: "Juno lands a perfect pose, arms wide; then the wet-floor sign tips over and bonks her on the head. Mochi, on a bench, gives a slow blink"
+    homage: "an Olympic figure-skating gala finale: spotlight, perfect spin, freeze on the final pose"
+  - category: "Tiny Spider"
+    emoji: "🕷️"
+    location: "a small bathroom in the morning, Juno at the sink with a toothbrush, a broom in the corner"
+    stake: "a tiny spider drops on a thread right in front of Juno's face while she brushes her teeth"
+    move: "Juno grabs the broom and raises it over her head like a legendary sword"
+    spectacle: "thunder and wind, a heroic low angle, her hair blowing, the spider tiny and still in the frame"
+    payoff: "the spider waves one tiny leg; Juno slowly lowers the broom and waves back. Mochi watches from the bathtub edge"
+    homage: "a legendary hero lifting the sacred sword to the sky as lightning strikes"
   - {category: "Snooze Button", emoji: "⏰", idea: "6:00 AM alarm duel, her hand charges with energy for the snooze strike; twist: it's Sunday"}
   - {category: "One Trip", emoji: "🛍️", idea: "carrying every grocery bag in one trip, arms glowing with power; twist: her keys are in the pocket under all the bags"}
-  - {category: "Pickle Jar", emoji: "🫙", idea: "jar lid boss, she strains with full power aura; twist: Mochi taps it and it opens"}
-  - {category: "Mosquito, 3 AM", emoji: "🦟", idea: "dark bedroom, epic two-handed clap attack in slow motion; twist: it's sitting on her nose"}
-  - {category: "Closing Elevator", emoji: "🛗", idea: "doors closing, she dives in a heroic leap; twist: someone just holds the door and she lands at their feet"}
-  - {category: "Last Slice", emoji: "🍕", idea: "standoff over the last pizza slice; twist: Mochi already ate it"}
-  - {category: "Umbrella vs Wind", emoji: "☔", idea: "monsoon storm battle with an umbrella; twist: it flips inside out and she gets carried off like a kite"}
   - {category: "Flat-Pack Furniture", emoji: "🪑", idea: "the instruction manual as an ancient scroll, she assembles at god speed; twist: one screw left over"}
-  - {category: "Instant Noodles", emoji: "🍜", idea: "guarding a 3-minute timer like a bomb countdown; twist: she forgot the flavor packet"}
   - {category: "One Bar of Wi-Fi", emoji: "📶", idea: "climbing onto the rooftop holding her phone to the sky; twist: the message finally sends: a thumbs up"}
-  - {category: "Wet Floor", emoji: "🧽", idea: "slides across a freshly mopped floor like a figure skater; twist: lands perfectly, then the sign falls on her"}
-  - {category: "Tiny Spider", emoji: "🕷️", idea: "broom raised like a legendary sword against a tiny spider; twist: the spider waves back and she gives up"}
   - {category: "Melting Ice Cream", emoji: "🍦", idea: "race against the summer sun to finish the cone; twist: the scoop falls, Mochi is waiting below"}
   - {category: "Monday Morning", emoji: "📅", idea: "Monday as a giant shadow kaiju over the city; twist: she defeats it and it splits into Tuesday"}
   - {category: "Exam Clock", emoji: "✏️", idea: "last minute of the exam, writing at light speed; twist: she forgot to write her name"}
@@ -76,6 +149,25 @@ episodes:
   - {category: "Parallel Parking", emoji: "🛵", idea: "squeezing a scooter into a tiny gap with surgical precision; twist: the car in front drives away"}
   - {category: "Fitted Bedsheet", emoji: "🛏️", idea: "wrestling a fitted sheet like a sea serpent; twist: she gives up and naps under it"}
   - {category: "The Last Stair", emoji: "🪜", idea: "carrying a heavy box up endless stairs like climbing a mountain; twist: the elevator dings open beside her"}
+
+# Famous movie moments for unscripted episodes to restage (film language only). Recognisable
+# energy, our cast, our everyday stakes: the planner picks the one that fits each gag.
+homages:
+  - "a sci-fi bullet-time dodge: everything freezes, the camera sweeps 360 degrees"
+  - "a spaghetti-western standoff: extreme close-ups of eyes and twitching fingers"
+  - "a heist-movie slow-motion dive through a laser grid"
+  - "a superhero three-point landing that cracks the ground"
+  - "an action hero walking away in slow motion as an explosion blooms behind, never looking back"
+  - "a ship's-bow 'flying' pose with arms spread wide into the wind"
+  - "a racing-movie launch: close-ups of the gear stick, the foot on the pedal, the tyres smoking"
+  - "a shonen anime power-up: screaming, blazing aura, rocks floating, ground cracking"
+  - "a disaster-movie escape: running toward camera as everything collapses behind"
+  - "a samurai duel: two figures pass each other, one beat of silence, then the cut lands"
+  - "a sports-movie final shot in slow motion, the whole crowd holding its breath"
+  - "a horror-movie slow door creak and a jump scare that turns out to be harmless"
+  - "a kung-fu training montage with sharp whip pans and snap zooms"
+  - "a space-launch countdown: rumble, steam, the final 3-2-1"
+  - "a fantasy hero lifting a sacred sword to the sky as lightning strikes"
 
 shots:              # v2 only (one call per shot); v3 uses `take` below
   count: 5          # hook / escalate / clash / climax / twist
@@ -170,6 +262,7 @@ models:
       endpoint: "bytedance/seedance-2.5/reference-to-video"
       input:
         image_urls: "{image_urls}"
+        video_urls: "{video_urls}"   # an episode's reference_video, when it has one
         prompt: "{prompt}"
         duration: "{duration}"
         resolution: "720p"

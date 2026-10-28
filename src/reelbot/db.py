@@ -119,7 +119,10 @@ class DB:
 
     def past_titles(self, limit: int = 60) -> list[str]:
         with self._conn() as c:
-            rows = c.execute("SELECT plan_json FROM jobs ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            rows = c.execute(  # rejected/failed drafts don't use up a premise
+                "SELECT plan_json FROM jobs WHERE status NOT IN (?, ?) ORDER BY id DESC LIMIT ?",
+                (JobStatus.REJECTED, JobStatus.FAILED, limit),
+            ).fetchall()
         out = []
         for r in rows:
             p = json.loads(r[0])

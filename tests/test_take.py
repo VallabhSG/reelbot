@@ -219,3 +219,74 @@ def test_planner_explains_bookends_and_who_cannot_talk():
 def test_planner_asks_for_relatable_stakes_and_physical_spectacle(take_series):
     sp = Planner(None, take_series).system_prompt()
     assert "The stake is social and relatable" in sp and "Make the feeling PHYSICAL" in sp
+
+
+class ScriptedLLM:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def json_chat(self, system, user, temperature=0.9):
+        self.calls.append((system, user))
+        r = self.responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def _raw_plan():
+    return _plan().model_dump()
+
+
+CLEAR = {"summary": "she makes it", "confusions": [], "clear": True, "score": 9}
+FOGGY = {
+    "summary": "she does something to the door?",
+    "confusions": ["what is the red coin"],
+    "clear": False,
+    "score": 4,
+}
+
+
+def test_scripted_episode_is_fixed_and_homage_never_named():
+    from reelbot.series import EpisodeSeed
+
+    s = make_take_series()
+    s.episodes[0] = EpisodeSeed(
+        category="Gate",
+        stake="the gate starts closing",
+        move="Kai vaults it",
+        payoff="he lands in a puddle",
+        homage="a spaghetti-western standoff",
+    )
+    up = Planner(None, s).user_prompt(1, [])
+    assert "FIXED STORY: follow it exactly" in up and "- Winning move (climax): Kai vaults it" in up
+    assert "stage it like a spaghetti-western standoff" in up and "Never name the film" in up
+
+
+def test_unclear_storyboard_goes_back_with_the_viewers_confusion():
+    llm = ScriptedLLM(_raw_plan(), FOGGY, _raw_plan(), CLEAR)
+    Planner(llm, make_take_series()).plan(1, [])
+    critic_system, critic_user = llm.calls[1]
+    assert "FIRST-TIME VIEWER" in critic_system and "SHOTS:" in critic_user
+    assert "winning_move" not in critic_user  # the viewer sees only the pictures
+    retry = llm.calls[2][1]
+    assert "what is the red coin" in retry and "visible with the sound off" in retry
+
+
+def test_critic_never_blocks_the_day():
+    # every storyboard foggy: ship the clearest one instead of failing
+    llm = ScriptedLLM(
+        _raw_plan(), FOGGY, _raw_plan(), {**FOGGY, "score": 6}, _raw_plan(), FOGGY, _raw_plan(), FOGGY
+    )
+    assert Planner(llm, make_take_series()).plan(1, []).title == "GATE"
+    # critic down: accept the valid storyboard
+    llm = ScriptedLLM(_raw_plan(), RuntimeError("groq 503"))
+    assert Planner(llm, make_take_series()).plan(1, []).title == "GATE"
+
+
+def test_unscripted_episode_picks_a_famous_movie_moment():
+    s = make_take_series()
+    s.homages = ["a western standoff", "bullet time"]
+    s.episodes = []
+    up = Planner(None, s).user_prompt(3, [])
+    assert "pick the ONE famous movie moment" in up and "a western standoff; bullet time" in up

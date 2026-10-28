@@ -36,6 +36,23 @@ class EpisodeSeed(BaseModel):
     category: str
     emoji: str = ""
     idea: str = ""
+    # A fixed gag script (v3). When given, the planner must follow it and only adds shots, camera,
+    # timing and sound: cause -> exaggerated effect -> payoff, each literal and drawable.
+    location: str = ""
+    stake: str = ""  # hook/escalate: the relatable situation (and any opening line)
+    move: str = ""  # the winning move: one physical action
+    spectacle: str = ""  # how the feeling is blown up into anime spectacle
+    payoff: str = ""  # the final image / punchline (and any closing line)
+    # A famous movie moment to stage it like: its camera language, framing and timing only (the
+    # planner never names the film or copies its characters, costumes, props, lines or music)
+    homage: str = ""
+    # Optional motion/camera reference clip URL (Seedance 2.5 `video_urls`). Use clips you're
+    # allowed to use: your own footage, licensed stock, or an earlier reel of ours.
+    reference_video: str = ""
+
+    @property
+    def scripted(self) -> bool:
+        return bool(self.stake and self.move and self.payoff)
 
 
 class SeriesMeta(BaseModel):
@@ -164,6 +181,9 @@ class Series(BaseModel):
     characters: list[Character] = Field(default_factory=list)
     cast: CastSpec = CastSpec()
     episodes: list[EpisodeSeed] = Field(default_factory=list)
+    # famous movie moments to stage unscripted episodes like (film language only, never the film's
+    # characters, lines or music); the planner picks the one that fits the gag
+    homages: list[str] = Field(default_factory=list)
     shots: ShotSpec = ShotSpec()
     take: TakeSpec = TakeSpec()
     models: Models

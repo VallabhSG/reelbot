@@ -9,6 +9,7 @@ Auth: "Authorization: Key <id>:<secret>". Failed generations are not billed.
 
 from __future__ import annotations
 
+import json
 import logging
 import mimetypes
 import time
@@ -101,7 +102,16 @@ class HiggsfieldClient:
             if status in TERMINAL_OK:
                 return data
             if status in TERMINAL_BAD:
-                raise HiggsfieldError(f"request {data.get('request_id')} ended as '{status}'", status, data)
+                # keep Higgsfield's own reason (moderation, bad input, ...) so it reaches Telegram
+                detail = {
+                    k: v
+                    for k, v in data.items()
+                    if k not in {"status", "request_id", "status_url", "cancel_url", "images", "video"} and v
+                }
+                why = f": {json.dumps(detail, ensure_ascii=False)[:400]}" if detail else " (no reason given)"
+                raise HiggsfieldError(
+                    f"request {data.get('request_id')} ended as '{status}'{why}", status, data
+                )
             if time.monotonic() > deadline:
                 raise HiggsfieldError(
                     f"request timed out after {self.timeout_s:.0f}s (last: {status})", status
