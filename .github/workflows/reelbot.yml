@@ -11,8 +11,13 @@ on:
       command:
         description: "reelbot command"
         type: choice
-        options: [tick, cast, smoke, make, status, check]
+        options: [tick, cast, pick, make, approve, reject, regen, status, smoke, check]
         default: tick
+      args:
+        description: "arguments, e.g. pick: Juno 3 Mochi 1 · approve: 2 --now · reject: 1 · regen: 2 3"
+        type: string
+        required: false
+        default: ""
 
 concurrency:
   group: reelbot-worker  # never two runs touching state at once
@@ -91,7 +96,13 @@ jobs:
 
       - name: Run
         if: steps.env.outputs.configured == 'true'
-        run: reelbot ${{ inputs.command || 'tick' }}
+        env:  # via env, never pasted into the script: the args box can't inject shell code
+          CMD: ${{ inputs.command || 'tick' }}
+          ARGS: ${{ inputs.args }}
+        run: |
+          set -f  # no glob expansion of the args
+          echo "reelbot $CMD $ARGS"
+          reelbot "$CMD" $ARGS
 
       - name: Push state
         # only if pull worked: a failed pull must never overwrite good remote state

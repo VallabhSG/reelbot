@@ -1,5 +1,6 @@
 """End-to-end dry run (v2): real ffmpeg + Pillow, stub generators, no network."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,22 @@ def test_approve_cast_validates(dry_settings, series):
     p = build(dry_settings, series).pipeline
     with pytest.raises(ValueError, match="run cast first"):
         p.approve_cast("Kai", 0)
+
+
+def test_lock_cast_clears_every_pick_button_and_confirms(dry_settings, series):
+    p = build(dry_settings, series).pipeline
+    cleared = []
+    p.notifier.clear_keyboard = cleared.append
+    p.propose_cast()
+    msgs = json.loads(p.db.kv_get("cast_msgs:Kai"))
+    assert len(msgs) == series.cast.candidates + 1  # each option photo + the "pick one" message
+    text = p.lock_cast("Kai", 2)
+    assert cleared == msgs
+    assert text == "🎭 Kai locked in (option 3). Cast complete, episodes are unblocked."
+    assert (
+        p.notifier.sent[-1] == text
+        and p.cast_urls()["Kai"] == json.loads(p.db.kv_get("cast_candidates:Kai"))[2]
+    )
 
 
 @needs_ffmpeg

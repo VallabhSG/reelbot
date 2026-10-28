@@ -64,6 +64,7 @@ class Telegram:
             text=text[:4096],
             reply_markup=reply_markup,
             reply_to_message_id=reply_to,
+            allow_sending_without_reply="true" if reply_to else None,  # replied-to msg deleted: still send
         )["message_id"]
 
     def send_video(self, path: Path, caption: str, reply_markup: dict | None = None) -> int:
@@ -112,9 +113,13 @@ class Telegram:
         except TelegramError as e:  # already edited / too old: harmless
             log.debug("clear_keyboard: %s", e)
 
-    def get_updates(self, offset: int | None, timeout: int = 50) -> list[dict[str, Any]]:
+    def get_updates(self, offset: int | None, timeout: int = 50, limit: int = 100) -> list[dict[str, Any]]:
         return self._call(
-            "getUpdates", offset=offset, timeout=timeout, allowed_updates=["message", "callback_query"]
+            "getUpdates",
+            offset=offset,
+            timeout=timeout,
+            limit=limit,
+            allowed_updates=["message", "callback_query"],
         )
 
 
@@ -151,5 +156,5 @@ class ConsoleNotifier:
     def clear_keyboard(self, message_id: int) -> None:
         pass
 
-    def get_updates(self, offset: int | None, timeout: int = 50) -> list[dict[str, Any]]:
+    def get_updates(self, offset: int | None, timeout: int = 50, limit: int = 100) -> list[dict[str, Any]]:
         return []

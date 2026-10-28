@@ -12,6 +12,7 @@ reelbot tick                  one worker pass, for cron hosts (GitHub Actions)
 reelbot state pull|push       sync DB + in-flight renders with the private state bucket
 reelbot smoke                 verify every live service (1 test image, no posting)
 reelbot cast [NAME ...]       draw character-sheet options and send them to Telegram to pick
+reelbot pick NAME N [...]     lock in option N for a character without Telegram (e.g. pick Juno 3 Mochi 1)
 """
 
 from __future__ import annotations
@@ -126,20 +127,58 @@ def cmd_status(_: argparse.Namespace) -> int:
     return 0
 
 
+def _tell(app, job_id: int, text: str) -> None:
+    """Mirror a command-line action in Telegram: drop the job's review buttons, say what happened."""
+    job = app.db.get_job(job_id) or {}
+    try:
+        if job.get("tg_message_id"):
+            app.pipeline.notifier.clear_keyboard(job["tg_message_id"])
+        app.pipeline.notifier.send_message(text, reply_to=job.get("tg_message_id"))
+    except Exception as e:  # the action itself already happened; Telegram is just the receipt
+        print(f"(couldn't confirm in Telegram: {e})")
+
+
 def cmd_approve(a: argparse.Namespace) -> int:
     app = build(get_settings())
     tz = ZoneInfo(app.settings.timezone)
     when = datetime.now(UTC) if a.now else publish_time_for_approval(app.series.schedule, datetime.now(tz))
     app.pipeline.approve(a.job, when)
     print(f"job {a.job} approved, publishes at {when.astimezone(tz):%Y-%m-%d %H:%M %Z}")
+    _tell(app, a.job, f"✅ #{a.job} approved, posting at {when.astimezone(tz):%a %H:%M}")
     if a.now:
         app.pipeline.publish_due()
     return 0
 
 
 def cmd_reject(a: argparse.Namespace) -> int:
-    build(get_settings()).pipeline.reject(a.job)
+    app = build(get_settings())
+    app.pipeline.reject(a.job)
     print(f"job {a.job} rejected")
+    _tell(app, a.job, f"❌ #{a.job} rejected")
+    return 0
+
+
+def parse_picks(tokens: list[str], names: list[str]) -> list[tuple[str, int]]:
+    """'Juno 3 Mochi 1' or 'juno=3 mochi=1' -> [('Juno', 2), ('Mochi', 0)] (0-based)."""
+    flat = [t for tok in tokens for t in tok.replace("=", " ").replace(",", " ").split()]
+    if not flat or len(flat) % 2:
+        raise SystemExit("usage: reelbot pick NAME OPTION [NAME OPTION ...]   e.g. pick Juno 3 Mochi 1")
+    by_lower = {n.lower(): n for n in names}
+    out = []
+    for raw_name, raw_opt in zip(flat[::2], flat[1::2], strict=True):
+        name = by_lower.get(raw_name.lower())
+        if not name:
+            raise SystemExit(f"unknown character {raw_name!r}; this series has: {', '.join(names)}")
+        if not raw_opt.isdigit() or int(raw_opt) < 1:
+            raise SystemExit(f"option for {name} must be a number like 1, 2, 3 (got {raw_opt!r})")
+        out.append((name, int(raw_opt) - 1))
+    return out
+
+
+def cmd_pick(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    for name, idx in parse_picks(a.picks, [c.name for c in app.series.characters]):
+        print(app.pipeline.lock_cast(name, idx))
     return 0
 
 
@@ -163,7 +202,7 @@ def cmd_run(_: argparse.Namespace) -> int:
 
 def cmd_tick(_: argparse.Namespace) -> int:
     app = build(get_settings())
-    Worker(app.pipeline, app.db, app.settings.timezone, poll_timeout=0).run_once()
+    print("tick: " + Worker(app.pipeline, app.db, app.settings.timezone, poll_timeout=0).run_once())
     return 0
 
 
@@ -222,6 +261,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("cast")
     p.add_argument("names", nargs="*")
     p.set_defaults(fn=cmd_cast)
+    p = sub.add_parser("pick")
+    p.add_argument("picks", nargs="+", help="NAME OPTION pairs, e.g. Juno 3 Mochi 1")
+    p.set_defaults(fn=cmd_pick)
     args = ap.parse_args(argv)
     return args.fn(args)
 

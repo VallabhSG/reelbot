@@ -83,6 +83,7 @@ class Pipeline:
             ch = chars[name]
             prompt = self.s.cast.sheet_template.format(description=ch.description, style=self.s.style.bible)
             urls: list[str] = []
+            msgs: list[int] = []
             for i in range(self.s.cast.candidates):
                 src = self.media.image(
                     {
@@ -96,14 +97,34 @@ class Pipeline:
                 local = download(src, d / f"{name}_{datetime.now(UTC):%Y%m%d%H%M%S}_{i}.png")
                 _, public = self.storage.put_public(local, f"cast/{name}")  # permanent, model-readable URL
                 urls.append(public)
-                self.notifier.send_photo(local, f"🎭 {name} · option {i + 1}", cast_keyboard(name, i))
+                msgs.append(
+                    self.notifier.send_photo(local, f"🎭 {name} · option {i + 1}", cast_keyboard(name, i))
+                )
             self.db.kv_set(f"cast_candidates:{name}", json.dumps(urls))
-            self.notifier.send_message(
-                f"Pick the {name} you like. Every future shot will use that exact sheet.",
-                cast_more_keyboard(name),
+            msgs.append(
+                self.notifier.send_message(
+                    f"Pick the {name} you like. Every future shot will use that exact sheet.",
+                    cast_more_keyboard(name),
+                )
             )
+            self.db.kv_set(f"cast_msgs:{name}", json.dumps(msgs))
             out[name] = urls
         return out
+
+    def lock_cast(self, name: str, idx: int, reply_to: int | None = None) -> str:
+        """Approve option idx (0-based), remove the pick buttons, confirm in Telegram.
+        Shared by the ✅ button and `reelbot pick`, so both behave the same."""
+        self.approve_cast(name, idx)
+        left = self.cast_missing()
+        tail = f" Still to pick: {', '.join(left)}." if left else " Cast complete, episodes are unblocked."
+        text = f"🎭 {name} locked in (option {idx + 1}).{tail}"
+        try:  # the pick is saved; Telegram is only the receipt
+            for mid in json.loads(self.db.kv_get(f"cast_msgs:{name}") or "[]"):
+                self.notifier.clear_keyboard(mid)
+            self.notifier.send_message(text, reply_to=reply_to)
+        except Exception:
+            log.exception("cast %s locked, but the Telegram confirmation failed", name)
+        return text
 
     def approve_cast(self, name: str, idx: int) -> str:
         raw = self.db.kv_get(f"cast_candidates:{name}")

@@ -67,8 +67,14 @@ pytest
 from 08:30 to 23:30 IST. Each run pulls the DB and in-flight renders from the private
 `S3_STATE_BUCKET`, does one pass (Telegram buttons → generate if due → publish if due), pushes state
 back. Put the whole `.env` into one repo secret named `ENV_FILE`. Kick off runs by hand from
-Actions → reelbot → Run workflow (`smoke`, `make`, `status`). ~1 billed minute per idle run plus
+Actions → reelbot → Run workflow: pick a command and, if it needs them, type its arguments in the
+*args* box (`pick` → `Juno 3 Mochi 1`, `approve` → `2 --now`, `reject` → `1`, `regen` → `2 3`).
+Every action done this way is also confirmed in Telegram. ~1 billed minute per idle run plus
 ~10–15 per reel keeps a private repo inside the free 2,000 min/month.
+
+Telegram buttons are read by the next `tick` (scheduled every 30 min, or run one by hand). Each
+tick's log ends with a line like `tick: Telegram: 2 handled · generate: not due · publish: nothing
+due`, and every tap gets a reply in the chat, including when it fails.
 
 **Always-on host (instant button response):**
 
@@ -92,12 +98,14 @@ reelbot regen ID SHOT        re-render one shot (1-based) and re-cut
 reelbot publish-due
 reelbot run                  the worker
 reelbot cast [NAME ...]      draw character-sheet options for Telegram
+reelbot pick NAME N [...]    lock in option N without Telegram, e.g. pick Juno 3 Mochi 1
 ```
 
 ## v2: how a reel is made
 
 1. **Cast (once).** `reelbot cast` (or send `/cast` to the bot) draws 3 character-sheet options per
-   character with Grok Imagine 2.0. Tap ✅ on the one you like. Episodes wait until every character
+   character with Grok Imagine 2.0. Tap ✅ on the one you like (or run `pick`, e.g. `Juno 3 Mochi 1`).
+   Episodes wait until every character
    has an approved sheet; the sheet is fed to every shot as a reference image.
 2. **Storyboard.** The planner fills a fixed recipe: 5 beats (hook → escalate → clash → climax →
    twist), one shot size each (never the same twice in a row, at least one close and one wide), one

@@ -26,6 +26,17 @@ def test_send_message_returns_id_and_targets_chat():
     assert Telegram("T", "42").send_message("hi", reply_to=5) == 77
     body = route.calls[0].request.content.decode()
     assert "chat_id=42" in body and "reply_to_message_id=5" in body
+    assert "allow_sending_without_reply=true" in body  # a deleted original must not block the receipt
+
+
+@respx.mock
+def test_get_updates_asks_for_buttons_and_messages():
+    route = respx.post(f"{API}/getUpdates").mock(
+        return_value=httpx.Response(200, json={"ok": True, "result": []})
+    )
+    Telegram("T", "42").get_updates(None, timeout=0)
+    body = route.calls[0].request.content.decode()
+    assert "offset" not in body and "callback_query" in body and "timeout=0" in body
 
 
 def test_review_keyboard_has_a_button_per_shot():

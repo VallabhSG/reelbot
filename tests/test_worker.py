@@ -1,6 +1,8 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from reelbot.series import Schedule
 from reelbot.worker import Worker, generation_due, publish_time_for_approval
 
@@ -42,8 +44,23 @@ class FakeTG:
     def clear_keyboard(self, mid):
         self.cleared.append(mid)
 
-    def get_updates(self, offset, timeout=50):
+    def get_updates(self, offset, timeout=50, limit=100):
         return []
+
+
+class QueueTG(FakeTG):
+    """Telegram's real queue semantics: getUpdates(offset=k) confirms (drops) every update below k."""
+
+    def __init__(self, updates):
+        super().__init__()
+        self.queue = list(updates)
+        self.calls = []
+
+    def get_updates(self, offset, timeout=50, limit=100):
+        self.calls.append(offset)
+        if offset is not None:
+            self.queue = [u for u in self.queue if u["update_id"] >= offset]
+        return self.queue[:limit]
 
 
 class FakePipeline:
@@ -81,6 +98,56 @@ def test_callbacks_dispatch_and_unauthorized_chat_is_ignored(series, db):
     w.handle_update(_cb("a:3", chat_id=666))
     assert p.calls == [("approve", 3), ("regen", 3, 1), ("music", 3), ("reject", 3)]
     assert p.notifier.cleared == [9, 9, 9, 9]
+    # the stranger's tap did nothing, but the owner is told (a mistyped chat id is never silent)
+    assert "Ignored a button tap from chat 666" in p.notifier.messages[-1]
+
+
+def test_chat_id_compare_tolerates_whitespace(series, db):
+    p = FakePipeline(series)
+    p.notifier.chat_id = " 42 "
+    Worker(p, db, "Asia/Kolkata").handle_update(_cb("x:3"))
+    assert p.calls == [("reject", 3)]
+
+
+def test_unexpected_failure_still_answers_in_telegram(series, db):
+    p = FakePipeline(series)
+
+    def boom(job_id):
+        raise RuntimeError("disk full")
+
+    p.reject = boom
+    Worker(p, db, "Asia/Kolkata").handle_update(_cb("x:3"))
+    assert p.notifier.messages[-1] == "⚠️ Button x:3 failed: RuntimeError: disk full"
+
+
+def test_poll_handles_each_update_once_then_confirms(series, db):
+    p = FakePipeline(series)
+    p.notifier = QueueTG([{"update_id": 500, **_cb("x:3")}, {"update_id": 501, **_cb("a:4")}])
+    w = Worker(p, db, "Asia/Kolkata", poll_timeout=0)
+    db.kv_set("telegram_offset", "999999")  # a stale offset from the old scheme must not swallow taps
+    assert w.poll_telegram() == 2
+    assert p.calls == [("reject", 3), ("approve", 4)]
+    assert p.notifier.calls == [None, 502] and p.notifier.queue == []
+    assert w.poll_telegram() == 0 and p.calls == [("reject", 3), ("approve", 4)]
+
+
+def test_crash_before_confirm_never_replays_a_tap(series, db):
+    p = FakePipeline(series)
+    p.notifier = QueueTG([{"update_id": 7, **_cb("x:3")}])
+    w = Worker(p, db, "Asia/Kolkata", poll_timeout=0)
+    real = p.notifier.get_updates
+
+    def confirm_crashes(offset, timeout=50, limit=100):
+        if offset is not None:
+            raise ConnectionError("runner died")
+        return real(offset, timeout, limit)
+
+    p.notifier.get_updates = confirm_crashes
+    with pytest.raises(ConnectionError):
+        w.poll_telegram()
+    p.notifier.get_updates = real
+    assert w.poll_telegram() == 0  # still pending on Telegram's side, but already handled here
+    assert p.calls == [("reject", 3)] and p.notifier.queue == []
 
 
 def test_value_errors_are_reported_to_the_button(series, db):
@@ -115,6 +182,30 @@ def test_run_once_order_resume_poll_generate_publish(series, db, monkeypatch):
     assert log == ["resume", "poll", "generate", "publish"]
 
 
+def test_run_once_summary_says_what_happened(series, db, monkeypatch):
+    p = OrderPipeline(series, [])
+    p.notifier = QueueTG([{"update_id": 1, **_cb("x:3")}])
+    w = Worker(p, db, "Asia/Kolkata", poll_timeout=0)
+    monkeypatch.setattr(w, "now", lambda: datetime(2026, 10, 29, 11, 0, tzinfo=IST))  # a Thursday
+    summary = w.run_once()
+    assert summary.startswith("Telegram: 1 handled")
+    assert "generate: not due" in summary and "publish: nothing due" in summary
+
+
+def test_telegram_outage_does_not_block_generation_or_publishing(series, db, monkeypatch):
+    log = []
+    p = OrderPipeline(series, log)
+
+    def down(*a, **k):
+        raise ConnectionError("api.telegram.org unreachable")
+
+    p.notifier.get_updates = down
+    w = Worker(p, db, "Asia/Kolkata", poll_timeout=0)
+    monkeypatch.setattr(w, "maybe_generate", lambda: log.append("generate"))
+    assert "poll failed (ConnectionError)" in w.run_once()
+    assert log == ["generate", "publish"]
+
+
 class CastPipeline(FakePipeline):
     def __init__(self, series, missing):
         super().__init__(series)
@@ -124,9 +215,10 @@ class CastPipeline(FakePipeline):
     def cast_missing(self):
         return self.missing
 
-    def approve_cast(self, name, idx):
+    def lock_cast(self, name, idx, reply_to=None):
         self.calls.append(("cast", name, idx))
         self.missing = [m for m in self.missing if m != name]
+        self.notifier.send_message("🎭 locked." + ("" if self.missing else " Cast complete"))
 
     def propose_cast(self, names=None):
         self.calls.append(("propose", names))

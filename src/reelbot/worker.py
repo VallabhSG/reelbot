@@ -6,6 +6,7 @@ button handling instead of racing it. State lives in SQLite, so restarts resume 
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -21,7 +22,18 @@ from .series import Schedule
 log = logging.getLogger(__name__)
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 LAST_GEN_KEY = "last_generation_date"
-TG_OFFSET_KEY = "telegram_offset"
+TG_SEEN_KEY = "telegram_seen"  # recent update ids: a crash between handling and confirming never replays
+TG_SEEN_MAX = 300
+
+
+def _describe(upd: dict[str, Any]) -> str:
+    if cb := upd.get("callback_query"):
+        chat = ((cb.get("message") or {}).get("chat") or {}).get("id")
+        return f"button {cb.get('data')!r} from chat {chat}"
+    msg = upd.get("message") or {}
+    text = (msg.get("text") or "")[:40]
+    kind = "reply" if msg.get("reply_to_message") else "message"
+    return f"{kind} {text!r} from chat {(msg.get('chat') or {}).get('id')}"
 
 
 def _at(day: datetime, hhmm: str) -> datetime:
@@ -50,15 +62,19 @@ class Worker:
         self.tz = ZoneInfo(tz)
         self.poll_timeout = poll_timeout
         self.tg = pipeline.notifier
+        self.gen_note = ""  # why the last maybe_generate() did or didn't generate, for the tick summary
 
     def now(self) -> datetime:
         return datetime.now(self.tz)
 
     # ---------------------------------------------------------------- generation
-    def resume_interrupted(self) -> None:
+    def resume_interrupted(self) -> list[int]:
+        ids = []
         for job in self.db.jobs_with_status(JobStatus.PLANNED, JobStatus.GENERATING):
             log.info("resuming job %d", job["id"])
             self._safe_generate(job["id"])
+            ids.append(job["id"])
+        return ids
 
     def _safe_generate(self, job_id: int) -> None:
         try:
@@ -70,9 +86,12 @@ class Worker:
 
     def maybe_generate(self) -> int | None:
         now = self.now()
-        if not generation_due(self.p.s.schedule, now, self.db.kv_get(LAST_GEN_KEY)):
+        sched = self.p.s.schedule
+        if not generation_due(sched, now, self.db.kv_get(LAST_GEN_KEY)):
+            self.gen_note = f"not due (episodes {'/'.join(sched.days)} at {sched.generate_at})"
             return None
         if missing := self.p.cast_missing():
+            self.gen_note = f"waiting for cast: {', '.join(missing)}"
             # don't burn the day: wait until the cast is approved, remind once per day
             nag_key = f"cast_nag:{now.date().isoformat()}"
             if not self.db.kv_get(nag_key):
@@ -88,8 +107,10 @@ class Worker:
         except Exception as e:
             log.exception("planning failed")
             self.tg.send_message(f"⚠️ Planning failed: {e}"[:1000])
+            self.gen_note = "planning failed"
             return None
         self._safe_generate(job_id)
+        self.gen_note = f"made job #{job_id}"
         return job_id
 
     # ---------------------------------------------------------------- telegram
@@ -116,11 +137,17 @@ class Worker:
             self.tg.send_message(f"⚠️ Cast failed: {e}"[:1000])
 
     def _authorized(self, chat: dict[str, Any] | None) -> bool:
-        return chat is not None and str(chat.get("id")) == str(self.tg.chat_id)
+        return chat is not None and str(chat.get("id")).strip() == str(self.tg.chat_id).strip()
 
     def _handle_callback(self, cb: dict[str, Any]) -> None:
-        if not self._authorized((cb.get("message") or {}).get("chat")):
-            log.warning("ignoring callback from unauthorized chat")
+        chat = (cb.get("message") or {}).get("chat")
+        if not self._authorized(chat):
+            got = (chat or {}).get("id")
+            log.warning("ignoring button from chat %s (TELEGRAM_CHAT_ID is %s)", got, self.tg.chat_id)
+            # tell the owner, so a mistyped TELEGRAM_CHAT_ID is never a silent dead end
+            self.tg.send_message(
+                f"⚠️ Ignored a button tap from chat {got}: TELEGRAM_CHAT_ID is set to {self.tg.chat_id}."
+            )
             return
         parts = (cb.get("data") or "").split(":")
         action = parts[0]
@@ -157,23 +184,16 @@ class Worker:
             self.tg.send_message(f"⚠️ {e}", reply_to=msg_id)
         except BudgetExceeded as e:
             self.tg.send_message(f"⛔ {e}")
-        except Exception:
+        except Exception as e:
             log.exception("callback %s failed", cb.get("data"))
+            self._report_failure(cb.get("data"), e, msg_id)
 
     def _handle_cast_callback(self, cb: dict[str, Any], parts: list[str], msg_id: int) -> None:
         name = parts[1]
         try:
             if parts[0] == "c":
-                self.p.approve_cast(name, int(parts[2]))
                 self.tg.answer_callback(cb["id"], f"{name} locked in")
-                self.tg.clear_keyboard(msg_id)
-                left = self.p.cast_missing()
-                tail = (
-                    f" Still to pick: {', '.join(left)}."
-                    if left
-                    else " Cast complete, episodes are unblocked."
-                )
-                self.tg.send_message(f"🎭 {name} locked in.{tail}", reply_to=msg_id)
+                self.p.lock_cast(name, int(parts[2]), reply_to=msg_id)
             else:
                 self.tg.answer_callback(cb["id"], f"More {name} options…")
                 self.tg.clear_keyboard(msg_id)
@@ -182,8 +202,15 @@ class Worker:
             self.tg.send_message(f"⚠️ {e}", reply_to=msg_id)
         except BudgetExceeded as e:
             self.tg.send_message(f"⛔ {e}")
-        except Exception:
+        except Exception as e:
             log.exception("cast callback %s failed", cb.get("data"))
+            self._report_failure(cb.get("data"), e, msg_id)
+
+    def _report_failure(self, data: Any, e: Exception, msg_id: int) -> None:
+        try:  # every tap gets a visible answer, even when the action itself blew up
+            self.tg.send_message(f"⚠️ Button {data} failed: {type(e).__name__}: {e}"[:1000], reply_to=msg_id)
+        except Exception:
+            log.exception("could not report the failure to Telegram either")
 
     def _handle_reply(self, msg: dict[str, Any]) -> None:
         if not self._authorized(msg.get("chat")) or not msg.get("text"):
@@ -195,15 +222,32 @@ class Worker:
                 self.tg.send_message(f"✏️ Caption for #{job['id']} updated:\n\n{caption}", reply_to=replied)
                 return
 
-    def poll_telegram(self) -> None:
-        offset = self.db.kv_get(TG_OFFSET_KEY)
-        updates = self.tg.get_updates(int(offset) if offset else None, timeout=self.poll_timeout)
+    def poll_telegram(self) -> int:
+        """Handle every tap/message Telegram still holds, then confirm them.
+
+        No stored offset: we ask for everything unconfirmed, skip ids we've already handled, and only
+        confirm after handling. A stale or wrong offset can't silently swallow taps this way, and a
+        crash mid-batch replays nothing (handled ids are remembered first)."""
+        updates = self.tg.get_updates(None, timeout=self.poll_timeout)
+        log.info("telegram: %d pending update(s)", len(updates))
+        seen: list[int] = json.loads(self.db.kv_get(TG_SEEN_KEY) or "[]")
+        handled = 0
         for upd in updates:
-            self.db.kv_set(TG_OFFSET_KEY, str(upd["update_id"] + 1))  # ack before handling: no replays
+            uid = upd["update_id"]
+            if uid in seen:
+                log.info("telegram update %s already handled; confirming only", uid)
+                continue
+            seen = [*seen, uid][-TG_SEEN_MAX:]
+            self.db.kv_set(TG_SEEN_KEY, json.dumps(seen))
+            log.info("telegram update %s: %s", uid, _describe(upd))
             try:
                 self.handle_update(upd)
+                handled += 1
             except Exception:  # one bad update must never stall the run (or the ones after it)
-                log.exception("telegram update %s failed", upd.get("update_id"))
+                log.exception("telegram update %s failed", uid)
+        if updates:  # confirm: Telegram drops everything below this offset
+            self.tg.get_updates(max(u["update_id"] for u in updates) + 1, timeout=0, limit=1)
+        return handled
 
     # ---------------------------------------------------------------- loop
     def tick(self) -> None:
@@ -211,13 +255,25 @@ class Worker:
         self.p.publish_due(datetime.now(UTC))
         self.poll_telegram()
 
-    def run_once(self) -> None:
+    def run_once(self) -> str:
         """One pass for cron hosts (GitHub Actions): finish crashed renders, drain Telegram
-        (approvals first, so a late approval can publish in the same run), generate, publish."""
-        self.resume_interrupted()
-        self.poll_telegram()
+        (approvals first, so a late approval can publish in the same run), generate, publish.
+        Returns a one-line summary so every run's log says what it did."""
+        resumed = self.resume_interrupted()
+        try:
+            taps: int | str = self.poll_telegram()
+        except Exception as e:  # Telegram down must not block a due generation or publish
+            log.exception("telegram poll failed")
+            taps = f"poll failed ({type(e).__name__})"
+        self.gen_note = ""
         self.maybe_generate()
-        self.p.publish_due(datetime.now(UTC))
+        published = self.p.publish_due(datetime.now(UTC)) or []
+        parts = [f"Telegram: {taps} handled" if isinstance(taps, int) else f"Telegram: {taps}"]
+        if resumed:
+            parts.append(f"resumed #{', #'.join(map(str, resumed))}")
+        parts.append(f"generate: {self.gen_note or 'nothing'}")
+        parts.append(f"published: {len(published)} reel(s)" if published else "publish: nothing due")
+        return " · ".join(parts)
 
     def run_forever(self) -> None:
         log.info("worker started (tz=%s)", self.tz)
