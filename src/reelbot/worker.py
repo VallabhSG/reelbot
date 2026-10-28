@@ -110,17 +110,21 @@ class Worker:
                 self.p.reject(job_id)
                 self.tg.answer_callback(cb["id"], "Rejected")
                 self.tg.clear_keyboard(msg_id)
+                self.tg.send_message(f"❌ #{job_id} rejected", reply_to=msg_id)
             elif action == "s":
                 idx = int(parts[2])
                 self.tg.answer_callback(cb["id"], f"Regenerating shot {idx + 1}…")
                 self.tg.clear_keyboard(msg_id)
+                self.tg.send_message(f"🔁 Re-rendering shot {idx + 1} of #{job_id}…", reply_to=msg_id)
                 self.p.regenerate_shot(job_id, idx)
             elif action == "m":
                 self.tg.answer_callback(cb["id"], "New music…")
                 self.tg.clear_keyboard(msg_id)
+                self.tg.send_message(f"🎵 New music for #{job_id}…", reply_to=msg_id)
                 self.p.regenerate_music(job_id)
         except (ValueError, KeyError) as e:
             self.tg.answer_callback(cb["id"], str(e))
+            self.tg.send_message(f"⚠️ {e}", reply_to=msg_id)
         except BudgetExceeded as e:
             self.tg.send_message(f"⛔ {e}")
         except Exception:

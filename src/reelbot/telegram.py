@@ -70,7 +70,12 @@ class Telegram:
             )["message_id"]
 
     def answer_callback(self, callback_id: str, text: str = "") -> None:
-        self._call("answerCallbackQuery", callback_query_id=callback_id, text=text[:200])
+        """Best effort: on cron hosts a tap is read up to 30 min later, and Telegram rejects answers to
+        queries that old ("query is too old"). That must never stop the action itself."""
+        try:
+            self._call("answerCallbackQuery", callback_query_id=callback_id, text=text[:200])
+        except (TelegramError, httpx.HTTPError) as e:
+            log.debug("answer_callback skipped: %s", e)
 
     def clear_keyboard(self, message_id: int) -> None:
         try:
