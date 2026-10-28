@@ -5,7 +5,9 @@ reelbot make [--job ID]       plan + generate one episode now (or resume a faile
 reelbot status                recent jobs + month spend
 reelbot approve ID [--now]    approve (posts at schedule.publish_at, or immediately with --now)
 reelbot reject ID
-reelbot regen ID SHOT         regenerate shot number SHOT (1-based)
+reelbot regen ID SHOT         regenerate shot number SHOT (1-based)  [v2 shot reels]
+reelbot retake ID             render the whole take again             [v3 one-take reels]
+reelbot bakeoff [MODEL ...]   one episode rendered on several video models, to pick a winner
 reelbot publish-due           publish approved jobs whose slot has passed
 reelbot run                   long-running worker (schedule + Telegram review + publishing)
 reelbot tick                  one worker pass, for cron hosts (GitHub Actions)
@@ -57,9 +59,21 @@ def cmd_check(_: argparse.Namespace) -> int:
         return 1
     per_reel = series.estimate_reel_cost()
     per_month = per_reel * len(series.schedule.days) * 52 / 12
-    print(f"✓ series '{series.series.name}' ({series.shots.count} shots × {series.shots.duration_s}s)")
-    print(f"  image: {series.models.image.endpoint}")
-    print(f"  video: {series.models.video.endpoint}")
+    if series.take.enabled:
+        t = series.take
+        print(f"✓ series '{series.series.name}' (one take: {t.seconds}s, {t.shots} shots, cuts inside)")
+        print(f"  image: {series.models.image.endpoint}")
+        for name in series.take_model_names():
+            spec = series.models.takes[name]
+            role = "default" if name == t.model else "bake-off"
+            print(
+                f"  take [{role}] {spec.label or name}: {spec.endpoint} "
+                f"~${series.estimate_reel_cost(name):.2f}/reel"
+            )
+    else:
+        print(f"✓ series '{series.series.name}' ({series.shots.count} shots × {series.shots.duration_s}s)")
+        print(f"  image: {series.models.image.endpoint}")
+        print(f"  video: {series.models.video.endpoint}")
     print(
         f"  est. ${per_reel:.2f}/reel (first take) · ~${per_month:.2f}/month at {len(series.schedule.days)}/week"
         f" · cap ${series.budget.monthly_usd:.2f}/month, ${series.budget.per_reel_usd:.2f}/reel"
@@ -87,7 +101,9 @@ def cmd_check(_: argparse.Namespace) -> int:
         if series.music.provider == "elevenlabs" and not s.elevenlabs_api_key:
             print("✗ Music: missing ELEVENLABS_API_KEY")
             ok = False
-        for kind, spec in (("image", series.models.image), ("video", series.models.video)):
+        specs = [("image", series.models.image), ("video", series.models.video)]
+        specs += [(f"takes.{n}", series.models.takes[n]) for n in series.take_model_names()]
+        for kind, spec in specs:
             if "<" in spec.endpoint:
                 print(f"✗ models.{kind}.endpoint is still a placeholder: {spec.endpoint}")
                 ok = False
@@ -188,6 +204,24 @@ def cmd_regen(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_retake(a: argparse.Namespace) -> int:
+    out = build(get_settings()).pipeline.retake(a.job)
+    print(f"job {a.job} new take: {out}")
+    return 0
+
+
+def cmd_bakeoff(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    ids = app.pipeline.bakeoff(a.models or None)
+    for jid in ids:
+        job = app.db.get_job(jid)
+        print(
+            f"#{jid} {app.pipeline.model_label(app.pipeline.take_model_for(jid)):<14} {job['status']:<16} "
+            f"${app.db.spend_for_job(jid):.2f}" + (f"  ! {job['error'][:100]}" if job["error"] else "")
+        )
+    return 0
+
+
 def cmd_publish_due(_: argparse.Namespace) -> int:
     ids = build(get_settings()).pipeline.publish_due()
     print(f"published: {ids or 'nothing due'}")
@@ -261,6 +295,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("cast")
     p.add_argument("names", nargs="*")
     p.set_defaults(fn=cmd_cast)
+    p = sub.add_parser("retake")
+    p.add_argument("job", type=int)
+    p.set_defaults(fn=cmd_retake)
+    p = sub.add_parser("bakeoff")
+    p.add_argument("models", nargs="*", help="keys from models.takes (default: take.bakeoff)")
+    p.set_defaults(fn=cmd_bakeoff)
     p = sub.add_parser("pick")
     p.add_argument("picks", nargs="+", help="NAME OPTION pairs, e.g. Juno 3 Mochi 1")
     p.set_defaults(fn=cmd_pick)

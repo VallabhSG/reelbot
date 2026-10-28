@@ -81,6 +81,16 @@ class FakePipeline:
     def regenerate_music(self, job_id):
         self.calls.append(("music", job_id))
 
+    def retake(self, job_id):
+        self.calls.append(("retake", job_id))
+
+    def pick_winner(self, job_id):
+        self.calls.append(("winner", job_id))
+        return "seedance2", [job_id - 1]
+
+    def model_label(self, name):
+        return {"seedance2": "Seedance 2.0"}.get(name, name)
+
 
 def _cb(data, chat_id=42):
     return {
@@ -100,6 +110,17 @@ def test_callbacks_dispatch_and_unauthorized_chat_is_ignored(series, db):
     assert p.notifier.cleared == [9, 9, 9, 9]
     # the stranger's tap did nothing, but the owner is told (a mistyped chat id is never silent)
     assert "Ignored a button tap from chat 666" in p.notifier.messages[-1]
+
+
+def test_retake_and_winner_buttons(series, db):
+    p = FakePipeline(series)
+    w = Worker(p, db, "Asia/Kolkata")
+    w.handle_update(_cb("t:5"))
+    w.handle_update(_cb("w:5"))
+    assert p.calls == [("retake", 5), ("winner", 5)]
+    assert p.notifier.messages[-1] == (
+        "🏆 Seedance 2.0 is now the model for every reel. Rejected #4. Tap ✅ Approve on #5 to post it."
+    )
 
 
 def test_chat_id_compare_tolerates_whitespace(series, db):

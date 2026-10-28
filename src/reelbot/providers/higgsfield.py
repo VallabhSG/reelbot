@@ -63,6 +63,15 @@ class HiggsfieldClient:
     )
     def _post(self, url: str, body: dict[str, Any], idem_key: str) -> dict[str, Any]:
         r = self.http.post(url, json=body, headers={**self._auth, "Idempotency-Key": idem_key})
+        if 400 <= r.status_code < 500 and r.status_code != 429:
+            # schema/key problems: surface the API's own explanation (wrong field names show up here),
+            # and never retry. Rejected requests aren't billed.
+            raise HiggsfieldError(
+                f"{url.removeprefix(self.base_url)} rejected the request: HTTP {r.status_code} "
+                f"{r.text[:600]}",
+                str(r.status_code),
+                r.text,
+            )
         r.raise_for_status()
         return r.json()
 
@@ -143,6 +152,10 @@ class HiggsfieldMedia:
 
     def video(self, ctx: dict[str, Any], job_id: int | None) -> str:
         return self._call(self.models.video, ctx, float(ctx["duration"]), job_id, "video")
+
+    def take(self, name: str, ctx: dict[str, Any], job_id: int | None) -> str:
+        """v3: the whole reel in one call, on the named model from models.takes."""
+        return self._call(self.models.takes[name], ctx, float(ctx["duration"]), job_id, f"take:{name}")
 
     def reference_urls(self, characters: list[Character]) -> list[str]:
         """Upload character reference images (cached for 30 min per process)."""

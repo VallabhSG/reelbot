@@ -81,6 +81,49 @@ class StubMedia:
         )
         return out.resolve().as_uri()
 
+    def take(self, name: str, ctx: dict[str, Any], job_id: int | None) -> str:
+        """One-take stub: the opening frame (or a drawn frame) animated for the full length, with a
+        clicking sound-effects track so the music/SFX mix is exercised too."""
+        self.calls.append(("take", {"model": name, **ctx}))
+        start = ctx.get("start_image") or (ctx.get("image_urls") or [""])[0]
+        src = Path(unquote(urlparse(start).path)) if start else Path("/nonexistent")
+        if not src.exists():
+            src = Path(unquote(urlparse(self.image({"prompt": ctx["prompt"][:120]}, job_id)).path))
+        dur = int(ctx["duration"])
+        out = self.workdir / f"take_{name}_{hashlib.md5(ctx['prompt'].encode()).hexdigest()[:6]}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-loop",
+                "1",
+                "-i",
+                str(src),
+                "-f",
+                "lavfi",
+                "-i",
+                f"sine=frequency=1200:beep_factor=4:duration={dur}",
+                "-vf",
+                f"zoompan=z='min(zoom+0.0012,1.25)':d={dur * 30}:s=720x1280:fps=30",
+                "-t",
+                str(dur),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-shortest",
+                str(out),
+            ],
+            check=True,
+        )
+        return out.resolve().as_uri()
+
     def reference_urls(self, characters: list[Character]) -> list[str]:
         return [f"file:///stub/{c.name}.png" for c in characters for _ in c.reference_images]
 
@@ -114,11 +157,15 @@ class StubLLM:
     """Returns a deterministic plan that follows the storyboard rules."""
 
     SIZES = ["WS", "MCU", "MS", "ECU", "EWS", "CU", "MS", "WS"]
-    BEATS = ["hook", "escalate", "clash", "climax", "twist"]
 
     def json_chat(self, system: str, user: str, temperature: float = 0.9) -> dict[str, Any]:
+        from ..storyboard import default_beats
+
         n_shots = json.loads(user.split("SHOT_COUNT_JSON=")[1].split("\n")[0])
-        cast = [ln[2:].split(":")[0] for ln in system.splitlines() if ln.startswith("- ") and ":" in ln[:30]]
+        beats = default_beats(n_shots)
+        talks = "DIALOGUE BOOKENDS" in system
+        section = system.split("RECURRING CAST", 1)[-1].split("\n\n", 1)[0]  # only the cast list
+        cast = [ln[2:].split(":")[0] for ln in section.splitlines() if ln.startswith("- ") and ":" in ln]
         cast = [c for c in cast if c and c[0].isupper() and " " not in c][:2]
         return {
             "title": "LAST TRAIN",
@@ -130,14 +177,25 @@ class StubLLM:
                 "name": "night metro platform",
                 "plate_prompt": "an empty underground metro platform at night, wet tiles, cold fluorescent light",
             },
+            "winning_move": "she slides through the closing doors on her knees",
+            "direction": "left to right",
+            "motif": "a red hair tie on her wrist",
+            "opening_frame": "she stands at the platform edge, phone in hand, doors open behind her",
             "shots": [
                 {
-                    "beat": self.BEATS[i] if n_shots == len(self.BEATS) else "hook",
+                    "beat": beats[i],
+                    "seconds": 3 if beats[i] == "climax" else 2,
                     "size": self.SIZES[i % len(self.SIZES)],
                     "angle": "low angle" if i % 2 else "eye level",
                     "camera": "slow push-in",
                     "cast": cast[:1] if i % 2 == 0 else cast[:2],
                     "action": f"beat {i + 1}: she sprints for the closing doors and slides through",
+                    "line": ("Ten seconds. Easy." if i == 0 else "Wrong train." if i == n_shots - 1 else "")
+                    if talks and cast
+                    else "",
+                    "speaker": cast[0] if talks and cast and i in (0, n_shots - 1) else "",
+                    "ends": f"state after beat {i + 1}",
+                    "sound": "sneakers squeak on wet tiles",
                     "light": "cold key light from screen-left, 5600K",
                 }
                 for i in range(n_shots)

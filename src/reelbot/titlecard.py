@@ -65,6 +65,43 @@ def render_title_card(title: str, subtitle: str, spec: TitleCard, font_path: Pat
     return out
 
 
+def _wrap(d: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_w: int) -> list[str]:
+    lines, cur = [], ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
+        left, _, right, _ = d.textbbox((0, 0), trial, font=font)
+        if right - left <= max_w or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    return [*lines, cur] if cur else lines
+
+
+def render_subtitle(text: str, font_path: Path | None, out: Path, y_ratio: float = 0.70) -> Path:
+    """A spoken line as a transparent 1080x1920 overlay: white, black outline, above the Reels UI
+    (the bottom ~25% is covered by the caption and buttons)."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    font = _font(font_path, 56)
+    lines = _wrap(d, text.strip(), font, int(W * 0.84))
+    step = 72
+    y0 = int(H * y_ratio) - step * (len(lines) - 1) // 2
+    for i, ln in enumerate(lines):
+        d.text(
+            (W // 2, y0 + i * step),
+            ln,
+            font=font,
+            fill="#FFFFFF",
+            anchor="mm",
+            stroke_width=5,
+            stroke_fill="#000000",
+        )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out)
+    return out
+
+
 def render_cover(frame: Path, title_png: Path, out: Path) -> Path:
     """Poster cover for the Reels grid: a 1080x1920 frame with the title card on top, saved as sRGB
     JPEG (what the Instagram API accepts for cover_url)."""

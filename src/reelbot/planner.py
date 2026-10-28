@@ -58,6 +58,86 @@ Respond with JSON only:
   "music_prompt": str}}"""
 
 
+DIALOGUE_NONE = """- line / speaker: always "". The episode is wordless: the story reads from the pictures."""
+
+DIALOGUE_BOOKENDS = """- DIALOGUE BOOKENDS (the format of the most-watched reels in this niche): a few very short spoken
+  lines set up the stakes at the start, the middle is pure action with sound effects and music,
+  and one deadpan line lands the punchline in the twist.
+  line: at most {max_lines} lines in the whole episode, only on hook/escalate shots (set-up) and the
+  twist shot (punchline). Max 10 words each, everyday spoken English, no names of brands. Every
+  other shot: line "" and speaker "".
+  speaker: who says it, a character IN that shot who can talk: {speakers}. {mute}
+  Lines must work for any viewer; the pictures still carry the story."""
+
+SYSTEM_TAKE = """You are the director of an anime micro-film series for Instagram Reels.
+Each episode is ONE continuous {seconds}-second scene in exactly {n} shots with hard cuts, rendered
+in a single generation, then cut to music. No narration and no on-screen text.
+
+SERIES: {name}
+PREMISE: {premise}
+RECURRING CAST (reference images are supplied automatically; never describe their looks):
+{characters}
+
+METHOD (how the most-watched creator in this niche works)
+- First pick the WINNING MOVE: the one decisive action that beats today's boss. Build the whole
+  episode backward from it. hook = the goal and why it matters right now (stakes in one glance);
+  escalate = how strong or unfair the boss is (show contrast: the small hero vs a huge problem,
+  staged like a dangerous arena); clash = the fight; climax = the winning move itself (slow motion or an
+  extreme close-up); twist = the deadpan anticlimax. One simple idea, every shot serves it.
+- Pace: slow, then faster, a burst on the winning move, one quiet beat, then the twist.
+
+HOW THE BEST REELS IN THIS FORMAT ARE BUILT
+- One continuous scene in ONE location, in story order, no time jumps. Every shot starts exactly
+  where the previous one ended: "ends" is the visible state at the cut (position, pose, what is in
+  hand), and the next shot's action continues from it. Cut on the action (match cuts), never cut to
+  something unrelated.
+- Keep screen direction: whoever moves, moves the same way on screen in every shot ("direction").
+- Short shots: {lo}-{hi} seconds each, summing to {seconds}. Fast shots (1-2 s) in escalate/clash,
+  the climax may hold 3-4 s (slow motion). Whole seconds only.
+- Mix scales like a film editor: establishing wide, medium, and at least one detail INSERT
+  (hands, an object, feet, eyes: CU or ECU). Never the same size twice in a row. At least one CU/ECU
+  and one WS/EWS.
+- motif: ONE small object or colour (e.g. "a red hair tie", "the green exit light") that appears in
+  at least two shots and pays off in the climax or twist. It ties the cuts together.
+- opening_frame: the very first frame as a still image: where each character is, pose, what is in
+  frame, framing. It must match shot 1 and show EVERY character who appears anywhere in the episode
+  (a small background presence is fine): the video is generated from this frame.
+
+STORYBOARD RULES
+- Beats in order, each at least once, never going backwards: {beats}.
+  hook = an instantly readable situation with stakes in the first second;
+  escalate = the character commits, tension rises;
+  clash = the big dynamic action, energy, motion;
+  climax = the decisive instant (slow motion or extreme close-up);
+  twist = a deadpan, funny anticlimax that recontextualises everything.
+- camera: exactly ONE physical move per shot: "static locked-off", "slow push-in", "fast push-in",
+  "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "handheld follow",
+  "whip pan", "slow-motion speed ramp" (climax only).
+- action: ONE action with a concrete verb and a visible end state, max 25 words. Refer to cast by
+  name only. No dialogue, no thoughts, no text, no signs.
+- sound: the one diegetic sound of the shot (footsteps on wet tiles, door seal hiss, cloth whoosh).
+  Never speech, never music.
+{dialogue}
+- cast: names from the cast list in that shot (max 2), [] for an empty shot.
+- location.plate_prompt describes the place EMPTY (no people, no animals), time of day, weather,
+  light, blank unreadable signage. light: same direction and colour temperature in every shot.
+- hook (the Instagram caption, not a shot): line 1 is a one-line truth everyone recognises about this
+  moment ("The doors always wait until you're one step away."), line 2 an optional curiosity line.
+  No hashtags.
+- music_prompt: genre, mood, instruments, "instrumental", builds to a hit on the climax. Never real
+  artists or songs.
+- Never use copyrighted characters, brands, logos, real people or real teams.
+
+Respond with JSON only:
+{{"title": str (1-2 words, max 14 chars), "category": str, "emoji": str, "logline": str, "hook": str,
+  "location": {{"name": str, "plate_prompt": str}},
+  "winning_move": str, "direction": str, "motif": str, "opening_frame": str,
+  "shots": [{{"beat": str, "seconds": int, "size": str, "angle": str, "camera": str, "cast": [str],
+              "action": str, "line": str, "speaker": str, "ends": str, "sound": str,
+              "light": str}}, ... exactly {n}],
+  "music_prompt": str}}"""
+
+
 class Planner:
     def __init__(self, llm: JSONChat, series: Series, max_attempts: int = 4):
         self.llm = llm
@@ -66,7 +146,31 @@ class Planner:
 
     def system_prompt(self) -> str:
         s = self.series
-        chars = "\n".join(f"- {c.name}: {c.description}" for c in s.characters) or "- (none)"
+        chars = "\n".join(f"- {c.name}: {c.description.strip()}" for c in s.characters) or "- (none)"
+        if s.take.enabled:
+            if s.take.dialogue == "bookends":
+                talkers = [c.name for c in s.characters if c.speaks]
+                mute = [c.name for c in s.characters if not c.speaks]
+                dialogue = DIALOGUE_BOOKENDS.format(
+                    max_lines=s.take.max_lines,
+                    speakers=", ".join(talkers) or "(nobody)",
+                    mute=f"{', '.join(mute)} never talk{'s' if len(mute) == 1 else ''} (sounds only)."
+                    if mute
+                    else "",
+                )
+            else:
+                dialogue = DIALOGUE_NONE
+            return SYSTEM_TAKE.format(
+                dialogue=dialogue,
+                seconds=s.take.seconds,
+                n=s.take.shots,
+                lo=s.take.min_shot_s,
+                hi=s.take.max_shot_s,
+                name=s.series.name,
+                premise=s.series.premise,
+                characters=chars,
+                beats=" -> ".join(BEATS),
+            )
         return SYSTEM.format(
             seconds=s.shots.count * s.shots.duration_s,
             n=s.shots.count,
@@ -82,7 +186,7 @@ class Planner:
         seed = s.episodes[episode_no - 1] if episode_no - 1 < len(s.episodes) else None
         lines = [
             f"EPISODE {episode_no} of {s.series.total_episodes}.",
-            f"SHOT_COUNT_JSON={json.dumps(s.shots.count)}",
+            f"SHOT_COUNT_JSON={json.dumps(s.shot_count)}",
         ]
         if seed:
             lines.append(f"Planned category: {seed.emoji} {seed.category}".strip())

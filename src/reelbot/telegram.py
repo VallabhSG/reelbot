@@ -29,6 +29,21 @@ def review_keyboard(job_id: int, n_shots: int, music_regen: bool) -> dict[str, A
     return {"inline_keyboard": rows}
 
 
+def take_keyboard(job_id: int, music_regen: bool, winner_label: str | None = None) -> dict[str, Any]:
+    """v3 review: the whole reel is one take, so a redo is the whole take, not a shot."""
+    rows = [
+        [
+            {"text": "✅ Approve", "callback_data": f"a:{job_id}"},
+            {"text": "❌ Reject", "callback_data": f"x:{job_id}"},
+        ],
+        [{"text": "🔁 Retake", "callback_data": f"t:{job_id}"}]
+        + ([{"text": "🎵 New music", "callback_data": f"m:{job_id}"}] if music_regen else []),
+    ]
+    if winner_label:
+        rows.append([{"text": f"🏆 Use {winner_label} from now on", "callback_data": f"w:{job_id}"}])
+    return {"inline_keyboard": rows}
+
+
 def cast_keyboard(name: str, idx: int) -> dict[str, Any]:
     return {"inline_keyboard": [[{"text": f"✅ Use this {name}", "callback_data": f"c:{name}:{idx}"}]]}
 

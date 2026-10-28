@@ -52,10 +52,14 @@ def test_retry_reuses_idempotency_key():
 
 @respx.mock
 def test_4xx_is_not_retried():
-    route = respx.post(f"{BASE}/m").mock(return_value=httpx.Response(422, json={"detail": "bad"}))
-    with pytest.raises(httpx.HTTPStatusError):
+    route = respx.post(f"{BASE}/m").mock(
+        return_value=httpx.Response(422, json={"detail": "image_urls: field required"})
+    )
+    with pytest.raises(HiggsfieldError) as e:
         client().submit("m", {})
     assert len(route.calls) == 1
+    # the API's own explanation reaches Telegram, so a wrong field name is a one-line fix
+    assert "HTTP 422" in str(e.value) and "image_urls: field required" in str(e.value)
 
 
 @respx.mock

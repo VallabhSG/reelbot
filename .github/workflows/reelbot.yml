@@ -11,10 +11,10 @@ on:
       command:
         description: "reelbot command"
         type: choice
-        options: [tick, cast, pick, make, approve, reject, regen, status, smoke, check]
+        options: [tick, bakeoff, make, approve, reject, retake, cast, pick, regen, status, smoke, check]
         default: tick
       args:
-        description: "arguments, e.g. pick: Juno 3 Mochi 1 · approve: 2 --now · reject: 1 · regen: 2 3"
+        description: "arguments, e.g. bakeoff: kling3 seedance2 seedance25 · pick: Juno 3 Mochi 1 · approve: 2 --now · reject: 1 · retake: 2"
         type: string
         required: false
         default: ""
@@ -29,7 +29,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90  # a 3-model bake-off renders three takes in one run
     steps:
       # Checked first so runs before setup exit in seconds instead of failing (and emailing) every 30 min.
       - name: Check ENV_FILE secret

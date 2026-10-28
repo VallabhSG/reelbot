@@ -98,8 +98,37 @@ reelbot regen ID SHOT        re-render one shot (1-based) and re-cut
 reelbot publish-due
 reelbot run                  the worker
 reelbot cast [NAME ...]      draw character-sheet options for Telegram
+reelbot bakeoff [MODEL ...]  one episode on several video models; tap 🏆 on the best
+reelbot retake ID            re-render a one-take reel
 reelbot pick NAME N [...]    lock in option N without Telegram, e.g. pick Juno 3 Mochi 1
 ```
+
+## v3: how a reel is made (default)
+
+Built from what the top accounts in this niche actually do (dyyhoang_aiker, kenai.film: frame-by-frame
+and audio analysis of their reels, dyyhoang's published Seedance prompts, his Aithetica interview):
+
+1. **Cast (once).** `cast` draws 3 character sheets per character; pick one (button or `pick Juno 3`).
+2. **Storyboard built backward from the winning move.** The planner first picks the one decisive
+   action that beats the boss, then builds hook (stakes) -> escalate (the boss is huge) -> clash ->
+   climax (the winning move) -> twist. One continuous scene: every shot starts where the last ended
+   ("ends"), screen direction is kept, one recurring motif ties the cuts together.
+3. **Dialogue bookends** (`take.dialogue: bookends`): up to 3 short lines in the set-up and one
+   deadpan line at the twist; the middle is wordless action. That's the format of the 200K-like and
+   12K-like reels we studied. Lines get our own burned-in subtitles; the music ducks under them.
+4. **One generation for the whole reel**, cuts inside it (no more stitched 3 s clips):
+   - Kling 3.0: starts from a composed opening frame (cast + location painted together), native
+     multi-shot list, native sound.
+   - Seedance 2.0: same opening frame, cuts written into the prompt, native audio.
+   - Seedance 2.5 (what those accounts use): location plate + character sheets as references,
+     sectioned prompt in the same layout as their published prompts.
+5. **Edit:** music-led mix over the model's own sound effects, music drops before the climax and
+   slams back, a flash frame on the climax cut, one quiet beat before the twist, -14 LUFS.
+
+**Bake-off:** `bakeoff` plans one episode and renders it on every model in `take.bakeoff` (or the
+ones you type in the args box: `kling3 seedance2 seedance25`). Storyboard, plate, opening frame and
+music are shared, so the only difference is the model. Tap 🏆 on the best one: it becomes the model
+for every reel and the others are rejected. 🔁 Retake re-renders one reel's take.
 
 ## v2: how a reel is made
 
@@ -116,18 +145,16 @@ reelbot pick NAME N [...]    lock in option N without Telegram, e.g. pick Juno 3
 5. **Edit + cover.** ffmpeg cut with music; the title goes on a poster cover (climax frame + title),
    uploaded as the Reels cover, so the hook shot stays clean.
 
-## Cost (3 reels/week)
+## Cost (one 15 s reel, list prices; Higgsfield often runs ~30% below these)
 
-| Item | List price | Per reel |
+| Model | Per reel | 3 a week |
 |---|---|---|
-| Location plate (Grok Imagine 2.0) | ~$0.04 / image | $0.04 |
-| Kling 4.0 R2V, 5 × 3 s @ 720p | $0.157 / s ($0.11 on promo) | $2.36 ($1.65) |
-| LLM plan | Groq free tier | $0 |
-| **First take** | | **~$2.40** |
+| Kling 3.0 (opening frame + take) | ~$1.90 | ~$25/month |
+| Seedance 2.0 | ~$4.70 | ~$61/month |
+| Seedance 2.5 | ~$8.50 | ~$110/month |
 
-3 reels a week ≈ $31/month at list price, under the $40 cap; a shot redo costs ~$0.47. Cast sheets
-are a one-time ~$0.24. Seedance 2.5 (what the reference account credits) is ~$4.85–6.93 per 15 s at
-720p; switch `models.video` when revenue allows.
+The guard stops at `budget.monthly_usd` ($40) and `budget.per_reel_usd` ($9). Pick the model by eye
+in a bake-off, then set reels/week to fit the budget.
 
 ## What the reference account does that you should copy
 

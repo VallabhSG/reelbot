@@ -1,21 +1,34 @@
-"""Orchestration (v2):
+"""Orchestration.
 
 cast (once):  character sheets -> Telegram -> you pick one per character -> reused forever
-per episode:  storyboard (LLM) -> location plate (image) -> N shots (reference-to-video, every shot
-              gets the cast sheets + the plate as @image refs) -> music -> edit -> poster cover
-              -> Telegram review -> Instagram (with the poster as the Reels cover)
+v2 episode:   storyboard -> location plate -> N separate shots (reference-to-video) -> music -> cut
+v3 episode:   continuous storyboard -> location plate -> opening frame (cast sheets + plate, painted
+              together) -> ONE generation of the whole reel with the cuts inside it, sound effects
+              on -> music -> mix (music-led, dip before the climax) -> poster cover
+then:         Telegram review -> Instagram (with the poster as the Reels cover)
+bake-off:     the same v3 storyboard, opening frame and music rendered on several video models, so
+              the only difference you judge is the model
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .assemble import AssemblyPlan, assemble, probe_duration
+from .assemble import (
+    AssemblyPlan,
+    TakeAssembly,
+    assemble,
+    assemble_take,
+    detect_cuts,
+    probe_duration,
+    snap,
+)
 from .budget import BudgetExceeded, BudgetGuard
 from .db import DB
 from .models import EpisodePlan, JobStatus
@@ -25,9 +38,15 @@ from .providers._http import download
 from .providers.music import MusicProvider, NoMusic
 from .series import Series
 from .storage import Storage
-from .storyboard import compose_shot_prompt
-from .telegram import cast_keyboard, cast_more_keyboard, review_keyboard
-from .titlecard import render_cover, render_title_card
+from .storyboard import (
+    compose_keyframe_prompt,
+    compose_shot_prompt,
+    compose_take_prompt,
+    episode_cast,
+    shot_starts,
+)
+from .telegram import cast_keyboard, cast_more_keyboard, review_keyboard, take_keyboard
+from .titlecard import render_cover, render_subtitle, render_title_card
 
 log = logging.getLogger(__name__)
 
@@ -143,11 +162,27 @@ class Pipeline:
             raise RuntimeError(f"series complete ({self.s.series.total_episodes} episodes)")
         plan = self.planner.plan(n, self.db.past_titles())
         job_id = self.db.create_job(n, plan)
-        self.db.update_job(job_id, caption=self.caption(plan, n))
+        model = self.active_take_model() if self.s.take.enabled else None
+        if model:
+            self.db.kv_set(f"take_model:{job_id}", model)
+        self.db.update_job(job_id, caption=self.caption(plan, n, self.model_label(model)))
         log.info("job %d planned: episode %d %s", job_id, n, plan.title)
         return job_id
 
-    def caption(self, plan: EpisodePlan, episode_no: int) -> str:
+    # ---- v3 model choice: per job > bake-off winner > series default
+    def active_take_model(self) -> str:
+        chosen = self.db.kv_get("take_model")
+        return chosen if chosen in self.s.models.takes else self.s.take.model
+
+    def take_model_for(self, job_id: int) -> str:
+        return self.db.kv_get(f"take_model:{job_id}") or self.active_take_model()
+
+    def model_label(self, model: str | None) -> str:
+        if not model:
+            return ""
+        return self.s.models.takes[model].label or model
+
+    def caption(self, plan: EpisodePlan, episode_no: int, model_label: str = "") -> str:
         meta, cap = self.s.series, self.s.caption
         header = meta.header_template.format(
             series=meta.name,
@@ -161,7 +196,7 @@ class Pipeline:
         text = cap.template.format(
             header=header,
             hook=plan.hook.strip(),
-            credits=cap.credits.strip(),
+            credits=cap.credits.strip().replace("{model}", model_label or "Kling"),
             hashtags=" ".join(tags),
             title=plan.title,
             logline=plan.logline,
@@ -180,10 +215,16 @@ class Pipeline:
 
     def storyboard_text(self, plan: EpisodePlan) -> str:
         rows = [f"📍 {plan.location.name}"]
+        if self.s.take.enabled:
+            if plan.motif:
+                rows.append(f"🔴 motif: {plan.motif}")
+            if plan.direction:
+                rows.append(f"➡️ {plan.direction}")
         for i, s in enumerate(plan.shots, 1):
             who = ", ".join(s.cast) or "—"
-            rows.append(f"{i}. {s.beat.upper()} · {s.size} {s.angle} · {s.camera} · {who}: {s.action}")
-        return "\n".join(rows)
+            secs = f" {s.seconds}s" if self.s.take.enabled else ""
+            rows.append(f"{i}. {s.beat.upper()}{secs} · {s.size} {s.angle} · {s.camera} · {who}: {s.action}")
+        return "\n".join(rows)[:900]
 
     # ================================================================== generation
     def _dir(self, job_id: int) -> Path:
@@ -258,13 +299,25 @@ class Pipeline:
         subtitle = tc.subtitle.format(handle=self.s.series.handle, n=episode_no, nn=f"{episode_no:02d}")
         return render_title_card(plan.title, subtitle, tc, font, self._dir(job_id) / "title.png")
 
+    @staticmethod
+    def _climax_index(plan: EpisodePlan) -> int:
+        beats = [s.beat for s in plan.shots]
+        return beats.index("climax") if "climax" in beats else len(beats) // 2
+
     def _cover(self, job_id: int, plan: EpisodePlan, title_png: Path) -> Path:
         """Poster cover: a frame from the climax shot (else the middle one) + the title card."""
-        beats = [s.beat for s in plan.shots]
-        idx = beats.index("climax") if "climax" in beats else len(beats) // 2
-        clip = Path(self.db.shots(job_id)[idx]["local_path"])
+        idx = self._climax_index(plan)
+        if self.s.take.enabled:  # one take: the climax is a time range inside it
+            clip = Path(self.db.kv_get(f"take_path:{job_id}") or "")
+            s = plan.shots[idx]
+            t = shot_starts(plan)[idx] + s.seconds * 0.6
+        else:
+            clip = Path(self.db.shots(job_id)[idx]["local_path"])
+            t = max(0.0, probe_duration(clip) * 0.6)
+        return self._cover_from(job_id, clip, t, title_png)
+
+    def _cover_from(self, job_id: int, clip: Path, t: float, title_png: Path) -> Path:
         frame = self._dir(job_id) / "cover_frame.png"
-        t = max(0.0, probe_duration(clip) * 0.6)
         subprocess.run(
             [
                 "ffmpeg",
@@ -305,6 +358,133 @@ class Pipeline:
             self.db.kv_set(f"cover:{job_id}", str(self._cover(job_id, plan, title_png)))
         return out
 
+    # ================================================================== v3: one take
+    def _keyframe(self, job_id: int, plan: EpisodePlan) -> str:
+        """The opening frame, with every character of the episode painted into the location (the
+        video starts from it, so nobody looks pasted on)."""
+        if url := self.db.kv_get(f"keyframe:{job_id}"):
+            return url
+        cast_urls = self.cast_urls()
+        cast = episode_cast(plan)
+        refs = [cast_urls[n] for n in cast] + [self._plate(job_id, plan)]
+        url = self.media.image(
+            {
+                "prompt": compose_keyframe_prompt(self.s, plan, cast),
+                "aspect_ratio": "9:16",
+                "image_urls": refs,
+                "negative_prompt": self.s.style.negative or None,
+            },
+            job_id,
+        )
+        local = download(url, self._dir(job_id) / "keyframe.png")
+        _, url = self.storage.put_public(local, f"keyframes/{job_id}")
+        self.db.kv_set(f"keyframe:{job_id}", url)
+        return url
+
+    def _render_take(self, job_id: int, plan: EpisodePlan) -> Path:
+        name = self.take_model_for(job_id)
+        spec = self.s.models.takes[name]
+        keyframe = self._keyframe(job_id, plan) if spec.start_frame else None
+        tp = compose_take_prompt(self.s, plan, spec.ref_token, spec.start_frame, spec.max_prompt_chars)
+        cast_urls = self.cast_urls()
+        refs = [
+            keyframe if r == "opening" else self._plate(job_id, plan) if r == "location" else cast_urls[r]
+            for r in tp.roles
+        ]
+        prompt = tp.prompt
+        seconds = sum(s.seconds for s in plan.shots)
+        url = self.media.take(
+            name,
+            {
+                "prompt": prompt,
+                "prompt_global": tp.global_prompt,
+                "image_urls": refs,
+                "start_image": keyframe or refs[0],
+                "shots": tp.shots,
+                "duration": seconds,
+                "duration_str": str(seconds),
+                "aspect_ratio": "9:16",
+                "negative_prompt": self.s.style.negative or None,
+            },
+            job_id,
+        )
+        attempt = int(self.db.kv_get(f"take_attempt:{job_id}") or "0") + 1
+        self.db.kv_set(f"take_attempt:{job_id}", str(attempt))
+        local = download(url, self._dir(job_id) / f"take_{attempt}.mp4")
+        self.db.kv_set(f"take_path:{job_id}", str(local))
+        self.db.kv_set(f"prompt:{job_id}:take", prompt)
+        return local
+
+    def _take_music(self, job_id: int, plan: EpisodePlan) -> Path | None:
+        """Reuse a finished track (resume, or shared across a bake-off); else compose one."""
+        prev = self.db.kv_get(f"music_path:{job_id}")
+        if prev and Path(prev).exists():
+            return Path(prev)
+        bpm = self.s.take.music_bpm
+        if bpm and "bpm" not in plan.music_prompt.lower():
+            plan = plan.model_copy(update={"music_prompt": f"{plan.music_prompt.rstrip('.')}, {bpm} BPM"})
+        music = self._render_music(job_id, plan, self.s.take.seconds)
+        self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
+        return music
+
+    def _assemble_take(self, job_id: int, plan: EpisodePlan, music: Path | None) -> Path:
+        t = self.s.take
+        take = Path(self.db.kv_get(f"take_path:{job_id}") or "")
+        starts = shot_starts(plan)
+        ci = self._climax_index(plan)
+        cuts = detect_cuts(take) if (t.flash_on_climax or t.quiet_before_twist_s) else []
+        climax_at = snap(float(starts[ci]), cuts)  # the model picks the exact cut frame
+        dips = []
+        if t.climax_dip_s > 0 and climax_at > t.climax_dip_s:  # tension: music drops, then slams back
+            dips.append((climax_at - t.climax_dip_s, climax_at))
+        beats = [s.beat for s in plan.shots]
+        if t.quiet_before_twist_s > 0 and "twist" in beats:  # one quiet beat after the burst
+            twist_at = snap(float(starts[beats.index("twist")]), cuts)
+            dips.append((twist_at, twist_at + t.quiet_before_twist_s))
+        flashes = [climax_at] if t.flash_on_climax and climax_at > 0 else []
+        # shots with a spoken line: the model's own audio comes up, the music ducks, subtitles show
+        speech = [
+            (float(t0), float(t0 + s.seconds)) for s, t0 in zip(plan.shots, starts, strict=True) if s.line
+        ]
+        subs = []
+        if t.subtitles:
+            font = (
+                self.s.resolve(self.s.title_card.subtitle_font) if self.s.title_card.subtitle_font else None
+            )
+            for k, (s, t0) in enumerate(zip(plan.shots, starts, strict=True)):
+                if s.line:
+                    png = render_subtitle(s.line, font, self._dir(job_id) / f"sub_{k}.png")
+                    subs.append((png, t0 + 0.15, t0 + s.seconds - 0.1))
+        out = assemble_take(
+            TakeAssembly(
+                take=take,
+                seconds=float(sum(s.seconds for s in plan.shots)),
+                music=music,
+                music_volume_db=t.music_volume_db,
+                sfx_volume_db=t.sfx_volume_db,
+                dips=dips,
+                out=self._dir(job_id) / "final.mp4",
+                speech=speech,
+                subtitles=subs,
+                flashes=flashes,
+            )
+        )
+        self.db.update_job(job_id, video_path=str(out))
+        if self.s.title_card.cover:
+            self.db.kv_set(f"cover:{job_id}", str(self._cover(job_id, plan, self._title_png(job_id, plan))))
+        return out
+
+    def _generate_take(self, job_id: int, plan: EpisodePlan) -> Path:
+        prev = self.db.kv_get(f"take_path:{job_id}")
+        if not (prev and Path(prev).exists()):  # resume: a finished take is already paid for
+            self._render_take(job_id, plan)
+        return self._assemble_take(job_id, plan, self._take_music(job_id, plan))
+
+    def _reassemble(self, job_id: int, plan: EpisodePlan, music: Path | None) -> Path:
+        if self.s.take.enabled:
+            return self._assemble_take(job_id, plan, music)
+        return self._assemble(job_id, plan, music)
+
     def generate(self, job_id: int) -> Path:
         plan = self.db.plan(job_id)
         self.db.update_job(job_id, status=JobStatus.GENERATING, error=None)
@@ -314,14 +494,17 @@ class Pipeline:
                 raise CastNotReady(
                     f"no approved character sheet for {', '.join(sorted(missing))}; run cast first"
                 )
-            plate = self._plate(job_id, plan)
-            for idx, row in enumerate(self.db.shots(job_id)):
-                if row["local_path"] and Path(row["local_path"]).exists():
-                    continue  # resume: shot already paid for
-                self._render_shot(job_id, idx, plan, plate)
-            music = self._render_music(job_id, plan, self.s.shots.count * self.s.shots.duration_s)
-            self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
-            out = self._assemble(job_id, plan, music)
+            if self.s.take.enabled:
+                out = self._generate_take(job_id, plan)
+            else:
+                plate = self._plate(job_id, plan)
+                for idx, row in enumerate(self.db.shots(job_id)):
+                    if row["local_path"] and Path(row["local_path"]).exists():
+                        continue  # resume: shot already paid for
+                    self._render_shot(job_id, idx, plan, plate)
+                music = self._render_music(job_id, plan, self.s.shots.count * self.s.shots.duration_s)
+                self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
+                out = self._assemble(job_id, plan, music)
         except BudgetExceeded as e:
             self.db.update_job(job_id, status=JobStatus.FAILED, error=str(e))
             self.notifier.send_message(f"⛔ Job {job_id} stopped by budget guard: {e}")
@@ -343,12 +526,19 @@ class Pipeline:
             self.notifier.send_photo(
                 Path(cover), f"Cover · #{job_id} {plan.title}\n\n{self.storyboard_text(plan)}"
             )
+        music_regen = not isinstance(self.music, NoMusic)
+        model = ""
+        if self.s.take.enabled:
+            model = self.model_label(self.take_model_for(job_id))
+            in_bakeoff = len(json.loads(self.db.kv_get(f"bakeoff:{job_id}") or "[]")) > 1
+            markup = take_keyboard(job_id, music_regen, model if in_bakeoff else None)
+        else:
+            markup = review_keyboard(job_id, len(plan.shots), music_regen)
         meta = (
-            f"#{job_id} · Ep {job['episode_no']} · {plan.title}\n"
+            f"#{job_id} · Ep {job['episode_no']} · {plan.title}" + (f" · {model}" if model else "") + "\n"
             f"cost ${spent:.2f} · month ${month:.2f}/{self.s.budget.monthly_usd:.0f}\n"
             f"Reply to this video with new text to replace the hook.\n\n"
         )
-        markup = review_keyboard(job_id, len(plan.shots), not isinstance(self.music, NoMusic))
         msg_id = self.notifier.send_video(Path(job["video_path"]), meta + job["caption"], markup)
         self.db.update_job(job_id, status=JobStatus.AWAITING_REVIEW, tg_message_id=msg_id)
 
@@ -369,8 +559,84 @@ class Pipeline:
         self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED, JobStatus.FAILED)
         self.db.update_job(job_id, status=JobStatus.REJECTED)
 
+    def retake(self, job_id: int) -> Path:
+        """v3: render the whole take again (same storyboard, opening frame and music)."""
+        self._require(job_id, JobStatus.AWAITING_REVIEW)
+        if not self.s.take.enabled:
+            raise ValueError("retake is for one-take reels; use the shot buttons")
+        plan = self.db.plan(job_id)
+        self.db.update_job(job_id, status=JobStatus.GENERATING)
+        try:
+            self._render_take(job_id, plan)
+            music = self.db.kv_get(f"music_path:{job_id}") or None
+            self._assemble_take(job_id, plan, Path(music) if music else None)
+        except Exception as e:
+            self.db.update_job(job_id, status=JobStatus.AWAITING_REVIEW)
+            self.notifier.send_message(f"⚠️ Retake of #{job_id} failed: {e}"[:1000])
+            raise
+        self.send_for_review(job_id)
+        return Path(self.db.get_job(job_id)["video_path"])
+
+    def bakeoff(self, models: list[str] | None = None) -> list[int]:
+        """Plan ONE episode and render it on several video models. Storyboard, location plate,
+        opening frame and music are shared, so the only difference is the model."""
+        if not self.s.take.enabled:
+            raise ValueError("bake-off needs take.enabled in the series file")
+        names = list(dict.fromkeys(models or self.s.take.bakeoff or [self.active_take_model()]))
+        unknown = [n for n in names if n not in self.s.models.takes]
+        if unknown:
+            raise ValueError(f"unknown model(s) {unknown}; choose from {sorted(self.s.models.takes)}")
+        n = self.db.next_episode_no()
+        plan = self.planner.plan(n, self.db.past_titles())
+        ids = []
+        for name in names:
+            jid = self.db.create_job(n, plan)
+            self.db.kv_set(f"take_model:{jid}", name)
+            self.db.update_job(jid, caption=self.caption(plan, n, self.model_label(name)))
+            ids.append(jid)
+        for jid in ids:
+            self.db.kv_set(f"bakeoff:{jid}", json.dumps(ids))
+        self.notifier.send_message(
+            f"🥊 Bake-off for episode {n} ({plan.title}): "
+            + " vs ".join(self.model_label(m) for m in names)
+            + ". Same storyboard, opening frame and music; previews arrive one by one."
+        )
+        for i, jid in enumerate(ids):
+            if i:
+                self._share_from(ids[0], jid)
+            try:
+                self.generate(jid)
+            except Exception:  # generate() already reported it; the other models still run
+                log.exception("bake-off job %d (%s) failed", jid, names[i])
+        return ids
+
+    def _share_from(self, src: int, dst: int) -> None:
+        for key in ("plate", "keyframe"):
+            if v := self.db.kv_get(f"{key}:{src}"):
+                self.db.kv_set(f"{key}:{dst}", v)
+        music = self.db.kv_get(f"music_path:{src}")
+        if music and Path(music).exists():
+            copy = self._dir(dst) / Path(music).name
+            shutil.copyfile(music, copy)
+            self.db.kv_set(f"music_path:{dst}", str(copy))
+
+    def pick_winner(self, job_id: int) -> tuple[str, list[int]]:
+        """Make this job's model the default for every reel; reject its bake-off siblings."""
+        self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED)
+        name = self.take_model_for(job_id)
+        self.db.kv_set("take_model", name)
+        rejected = []
+        for sib in json.loads(self.db.kv_get(f"bakeoff:{job_id}") or "[]"):
+            job = self.db.get_job(sib)
+            if sib != job_id and job and job["status"] in (JobStatus.AWAITING_REVIEW, JobStatus.FAILED):
+                self.db.update_job(sib, status=JobStatus.REJECTED)
+                rejected.append(sib)
+        return name, rejected
+
     def regenerate_shot(self, job_id: int, idx: int) -> Path:
         self._require(job_id, JobStatus.AWAITING_REVIEW)
+        if self.s.take.enabled:
+            raise ValueError("this reel is one take: use 🔁 Retake")
         plan = self.db.plan(job_id)
         if not 0 <= idx < len(plan.shots):
             raise ValueError(f"shot index {idx} out of range")
@@ -391,9 +657,13 @@ class Pipeline:
         plan = self.db.plan(job_id)
         self.db.update_job(job_id, status=JobStatus.GENERATING)
         try:
-            music = self._render_music(job_id, plan, self.s.shots.count * self.s.shots.duration_s)
-            self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
-            self._assemble(job_id, plan, music)
+            if self.s.take.enabled:
+                self.db.kv_set(f"music_path:{job_id}", "")  # force a fresh track
+                music = self._take_music(job_id, plan)
+            else:
+                music = self._render_music(job_id, plan, self.s.shots.count * self.s.shots.duration_s)
+                self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
+            self._reassemble(job_id, plan, music)
         except Exception as e:
             self.db.update_job(job_id, status=JobStatus.AWAITING_REVIEW)
             self.notifier.send_message(f"⚠️ New music for #{job_id} failed: {e}"[:1000])
@@ -405,7 +675,8 @@ class Pipeline:
         job = self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED)
         plan = self.db.plan(job_id)
         plan.hook = hook.strip()
-        caption = self.caption(plan, job["episode_no"])
+        model = self.model_label(self.take_model_for(job_id)) if self.s.take.enabled else ""
+        caption = self.caption(plan, job["episode_no"], model)
         self.db.update_job(job_id, plan_json=plan.model_dump_json(), caption=caption)
         return caption
 

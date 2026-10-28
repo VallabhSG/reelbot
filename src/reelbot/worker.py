@@ -179,6 +179,23 @@ class Worker:
                 self.tg.clear_keyboard(msg_id)
                 self.tg.send_message(f"🎵 New music for #{job_id}…", reply_to=msg_id)
                 self.p.regenerate_music(job_id)
+            elif action == "t":
+                self.tg.answer_callback(cb["id"], "Retaking…")
+                self.tg.clear_keyboard(msg_id)
+                self.tg.send_message(f"🔁 Rendering a new take of #{job_id}…", reply_to=msg_id)
+                self.p.retake(job_id)
+            elif action == "w":
+                name, rejected = self.p.pick_winner(job_id)
+                label = self.p.model_label(name)
+                self.tg.answer_callback(cb["id"], f"{label} it is")
+                for sib in rejected:
+                    if (job := self.db.get_job(sib)) and job.get("tg_message_id"):
+                        self.tg.clear_keyboard(job["tg_message_id"])
+                tail = f" Rejected #{', #'.join(map(str, rejected))}." if rejected else ""
+                self.tg.send_message(
+                    f"🏆 {label} is now the model for every reel.{tail} Tap ✅ Approve on #{job_id} to post it.",
+                    reply_to=msg_id,
+                )
         except (ValueError, KeyError) as e:
             self.tg.answer_callback(cb["id"], str(e))
             self.tg.send_message(f"⚠️ {e}", reply_to=msg_id)

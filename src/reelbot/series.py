@@ -14,6 +14,7 @@ class Character(BaseModel):
     description: str  # full design, used for the one-time character sheet
     short: str = ""  # a few words repeated in every shot prompt next to the reference tag
     reference_images: list[Path] = Field(default_factory=list)  # optional hand-made refs (else: cast)
+    speaks: bool = True  # False: never gets a spoken line (e.g. the cat)
 
 
 class CastSpec(BaseModel):
@@ -65,6 +66,11 @@ class ModelSpec(BaseModel):
     cost_per_call: float = 0.0
     cost_per_second: float = 0.0
     ref_token: str = "@image_{n}"  # how this model addresses reference images inside the prompt
+    label: str = ""  # human name shown in Telegram, e.g. "Kling 3.0"
+    max_prompt_chars: int = 0  # the endpoint's prompt limit (0 = none); v3 prompts shrink to fit
+    # v3: True = the model starts from the composed opening frame (image-to-video); False = it gets
+    # the location plate + character sheets as references (reference-to-video, image 1 = location)
+    start_frame: bool = False
 
     def estimate(self, seconds: float = 0.0) -> float:
         return round(self.cost_per_call + self.cost_per_second * seconds, 4)
@@ -72,7 +78,42 @@ class ModelSpec(BaseModel):
 
 class Models(BaseModel):
     image: ModelSpec
-    video: ModelSpec
+    video: ModelSpec  # v2: one call per shot
+    # v3: models that render the WHOLE reel in one call (cuts inside the generation), by short name
+    takes: dict[str, ModelSpec] = Field(default_factory=dict)
+
+
+class TakeSpec(BaseModel):
+    """v3: the whole reel as ONE generation with hard cuts inside it, so characters, light and action
+    carry across the cuts. The opening frame is composed first (cast sheets + location plate) and the
+    video starts from it, so characters sit in the scene instead of being pasted on."""
+
+    enabled: bool = False
+    seconds: int = Field(15, ge=4, le=30)
+    shots: int = Field(6, ge=2, le=10)
+    min_shot_s: int = Field(1, ge=1)
+    max_shot_s: int = Field(4, ge=1)
+    model: str = ""  # key in models.takes used for every reel (a bake-off winner overrides it)
+    bakeoff: list[str] = Field(default_factory=list)  # keys rendered side by side by `reelbot bakeoff`
+    # "bookends": a few short spoken lines in the opening and at the twist, wordless in between
+    # (the format of the top reels in this niche); "none": fully wordless
+    dialogue: Literal["none", "bookends"] = "none"
+    max_lines: int = Field(3, ge=0, le=6)
+    subtitles: bool = True  # burn spoken lines in as subtitles (our font, exact timing)
+    sfx_volume_db: float = -8.0  # the model's own sound effects, under the music (music-led mix)
+    music_volume_db: float = 0.0
+    climax_dip_s: float = 0.8  # music dips this long right before the climax and slams back on it
+    quiet_before_twist_s: float = 0.6  # "one quiet second before the ending" after the burst
+    flash_on_climax: bool = True  # a 2-frame white flash frame on the cut into the climax
+    music_bpm: int = 120  # cuts fall on whole seconds, which are beats at 120 BPM
+
+    @model_validator(mode="after")
+    def _fits(self) -> TakeSpec:
+        if not self.shots * self.min_shot_s <= self.seconds <= self.shots * self.max_shot_s:
+            raise ValueError(
+                f"{self.shots} shots of {self.min_shot_s}-{self.max_shot_s}s can't fill {self.seconds}s"
+            )
+        return self
 
 
 class MusicSpec(BaseModel):
@@ -93,6 +134,7 @@ class TitleCard(BaseModel):
     stroke_width: int = 6
     y_ratio: float = Field(0.62, ge=0.1, le=0.9, description="vertical position of the title, 0=top")
     in_video: bool = False  # burn the title into the first seconds (off: keep the hook shot clean)
+    subtitle_font: Path | None = None  # spoken-line subtitles (default: DejaVu Sans Bold)
     cover: bool = True  # poster cover (best frame + title) uploaded as the Reels cover image
     cover_offset_ms: int = 1200  # fallback cover frame if no poster cover is used
 
@@ -123,6 +165,7 @@ class Series(BaseModel):
     cast: CastSpec = CastSpec()
     episodes: list[EpisodeSeed] = Field(default_factory=list)
     shots: ShotSpec = ShotSpec()
+    take: TakeSpec = TakeSpec()
     models: Models
     music: MusicSpec = MusicSpec()
     title_card: TitleCard = TitleCard()
@@ -134,16 +177,46 @@ class Series(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> Series:
-        est = self.estimate_reel_cost()
-        if est > self.budget.per_reel_usd:
-            raise ValueError(
-                f"one reel is estimated at ${est:.2f}, above budget.per_reel_usd "
-                f"(${self.budget.per_reel_usd:.2f}); lower shots/duration or raise the cap"
-            )
+        if self.take.enabled:
+            names = [n for n in [self.take.model, *self.take.bakeoff] if n]
+            if not names:
+                raise ValueError("take.enabled needs take.model (a key in models.takes)")
+            unknown = [n for n in names if n not in self.models.takes]
+            if unknown:
+                raise ValueError(f"take model(s) {unknown} not in models.takes {sorted(self.models.takes)}")
+        for name in self.take_model_names() or [None]:
+            est = self.estimate_reel_cost(name)
+            if est > self.budget.per_reel_usd:
+                raise ValueError(
+                    f"one reel{f' on {name}' if name else ''} is estimated at ${est:.2f}, above "
+                    f"budget.per_reel_usd (${self.budget.per_reel_usd:.2f}); shorten it or raise the cap"
+                )
         return self
 
-    def estimate_reel_cost(self) -> float:
-        """First take: one location plate + n shots + music."""
+    @property
+    def shot_count(self) -> int:
+        return self.take.shots if self.take.enabled else self.shots.count
+
+    @property
+    def reel_seconds(self) -> int:
+        return self.take.seconds if self.take.enabled else self.shots.count * self.shots.duration_s
+
+    def take_model_names(self) -> list[str]:
+        if not self.take.enabled:
+            return []
+        return list(dict.fromkeys(n for n in [self.take.model, *self.take.bakeoff] if n))
+
+    def estimate_reel_cost(self, take_model: str | None = None) -> float:
+        """First take. v2: location plate + n shots + music. v3: plate + opening frame + one take + music."""
+        if self.take.enabled:
+            spec = self.models.takes[take_model or self.take.model]
+            frames = 2 if spec.start_frame else 1  # location plate (+ the opening frame)
+            return round(
+                frames * self.models.image.estimate()
+                + spec.estimate(self.take.seconds)
+                + self.music.cost_per_track,
+                4,
+            )
         n, d = self.shots.count, self.shots.duration_s
         return round(
             self.models.image.estimate() + n * self.models.video.estimate(d) + self.music.cost_per_track,
