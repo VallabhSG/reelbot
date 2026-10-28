@@ -180,7 +180,7 @@ take:
   enabled: true
   seconds: 15
   shots: 6           # 1-4 s each (the reference reels cut every ~1 s, on the beat)
-  model: kling3      # default for scheduled reels; a bake-off winner overrides it
+  model: seedance2      # default for scheduled reels; a bake-off winner overrides it
   bakeoff: [kling3, seedance2]   # add seedance25 in the args box to test it too (~$8.50 list)
   dialogue: bookends # short lines at the start and the twist, wordless action in between
   max_lines: 3
