@@ -8,6 +8,9 @@ reelbot reject ID
 reelbot regen ID SHOT         regenerate shot number SHOT (1-based)
 reelbot publish-due           publish approved jobs whose slot has passed
 reelbot run                   long-running worker (schedule + Telegram review + publishing)
+reelbot tick                  one worker pass, for cron hosts (GitHub Actions)
+reelbot state pull|push       sync DB + in-flight renders with the private state bucket
+reelbot smoke                 verify every live service (1 test image, no posting)
 """
 
 from __future__ import annotations
@@ -146,6 +149,26 @@ def cmd_run(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tick(_: argparse.Namespace) -> int:
+    app = build(get_settings())
+    Worker(app.pipeline, app.db, app.settings.timezone, poll_timeout=0).run_once()
+    return 0
+
+
+def cmd_state(a: argparse.Namespace) -> int:
+    from .state import StateSync
+
+    sync = StateSync(get_settings())
+    sync.pull() if a.action == "pull" else sync.push()
+    return 0
+
+
+def cmd_smoke(_: argparse.Namespace) -> int:
+    from .smoke import run_smoke
+
+    return run_smoke(get_settings())
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -171,6 +194,11 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_regen)
     sub.add_parser("publish-due").set_defaults(fn=cmd_publish_due)
     sub.add_parser("run").set_defaults(fn=cmd_run)
+    sub.add_parser("tick").set_defaults(fn=cmd_tick)
+    p = sub.add_parser("state")
+    p.add_argument("action", choices=["pull", "push"])
+    p.set_defaults(fn=cmd_state)
+    sub.add_parser("smoke").set_defaults(fn=cmd_smoke)
     args = ap.parse_args(argv)
     return args.fn(args)
 

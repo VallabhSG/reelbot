@@ -51,27 +51,34 @@ shots:
 # Prices are what the budget guard charges against your caps; keep them in sync with Higgsfield.
 # ---------------------------------------------------------------------------------------------
 models:
+  # Soul 2 text-to-image, $0.0032/img at 720p (open.higgsfield.ai, Oct 2026). Tuned for realism; if the
+  # anime look is weak, try alibaba/z-image/turbo ($0.015) or xai/grok-imagine-image-2.0 ($0.04).
   image:
     endpoint: "higgsfield-ai/soul/v2/standard"
     input:
       prompt: "{prompt}"
-      aspect_ratio: "{aspect_ratio}"   # verify field name on the Soul API page; remove if rejected
+      aspect_ratio: "{aspect_ratio}"
+      resolution: "720p"
+      batch_size: 1
+      enhance_prompt: true
     output_path: "images.0.url"
     cost_per_call: 0.0032
 
-  # Budget tier (<$50/mo): Kling 2.5 image-to-video at ~$0.042/s.
+  # Budget tier: Kling 2.5 Turbo Standard image-to-video, 720p, 5 or 10s clips.
+  # Listed at $0.042/s ($0.021/s during the current 50% promo); the guard charges list price.
   video:
-    endpoint: "<paste the Kling 2.5 image-to-video endpoint ID from console.higgsfield.ai>"
-    input:                              # verify field names on that model's API page
+    endpoint: "kling-video/v2.5-turbo/standard/image-to-video"
+    input:
       prompt: "{prompt}"
       image_url: "{image_url}"
       duration: "{duration}"
+      cfg_scale: 0.5
       negative_prompt: "{negative_prompt}"
     output_path: "video.url"
     cost_per_second: 0.042
 
-  # Premium tier, once revenue allows: Seedance 2.5 reference-to-video (what most top AI animators
-  # credit). Schema below is from docs.higgsfield.ai; set cost_per_second from your console.
+  # Premium tier: Seedance 2.5 reference-to-video (what he credits). Schema from docs.higgsfield.ai.
+  # Listed from $0.206/s ($0.144/s promo) -> ~$3/reel at list. Raise budget.per_reel_usd to 3.5 first.
   # video:
   #   endpoint: "bytedance/seedance-2.5/reference-to-video"
   #   input:
@@ -83,7 +90,7 @@ models:
   #     generate_audio: false
   #     bitrate_mode: "high"
   #   output_path: "video.url"
-  #   cost_per_second: 0.0   # fill in
+  #   cost_per_second: 0.206
 
 music:
   provider: elevenlabs   # elevenlabs | library (assets/music, tracks you own) | none

@@ -63,6 +63,15 @@ pytest
 
 ## Deploy
 
+**GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` every 30 min
+from 08:30 to 23:30 IST. Each run pulls the DB and in-flight renders from the private
+`S3_STATE_BUCKET`, does one pass (Telegram buttons → generate if due → publish if due), pushes state
+back. Put the whole `.env` into one repo secret named `ENV_FILE`. Kick off runs by hand from
+Actions → reelbot → Run workflow (`smoke`, `make`, `status`). ~1 billed minute per idle run plus
+~10–15 per reel keeps a private repo inside the free 2,000 min/month.
+
+**Always-on host (instant button response):**
+
 ```bash
 docker build -t reelbot .
 docker run -d --env-file .env -v reelbot-data:/app/data --restart unless-stopped reelbot

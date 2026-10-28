@@ -149,6 +149,14 @@ class Worker:
         self.p.publish_due(datetime.now(UTC))
         self.poll_telegram()
 
+    def run_once(self) -> None:
+        """One pass for cron hosts (GitHub Actions): finish crashed renders, drain Telegram
+        (approvals first, so a late approval can publish in the same run), generate, publish."""
+        self.resume_interrupted()
+        self.poll_telegram()
+        self.maybe_generate()
+        self.p.publish_due(datetime.now(UTC))
+
     def run_forever(self) -> None:
         log.info("worker started (tz=%s)", self.tz)
         self.resume_interrupted()

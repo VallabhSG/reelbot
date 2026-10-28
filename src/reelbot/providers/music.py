@@ -37,7 +37,11 @@ class ElevenLabsMusic:
 
     def track(self, prompt: str, seconds: float, dest: Path, job_id: int | None, seed: int) -> Path:
         self.guard.check(self.spec.cost_per_track, job_id)
-        kwargs: dict = {"prompt": prompt, "music_length_ms": int(seconds * 1000) + 1500}
+        kwargs: dict = {
+            "prompt": prompt,
+            "music_length_ms": int(seconds * 1000) + 1500,
+            "force_instrumental": True,
+        }
         if self.spec.model_id:
             kwargs["model_id"] = self.spec.model_id
         audio = self.client.music.compose(**kwargs)

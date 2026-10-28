@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # --- LLM planner (any OpenAI-compatible endpoint: Groq, OpenRouter, OpenAI, local) ---
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_api_key: str = ""
-    llm_model: str = "llama-3.3-70b-versatile"
+    llm_model: str = "openai/gpt-oss-120b"  # Groq's replacement for the retired llama-3.3-70b-versatile
 
     # --- Higgsfield (images + video: Soul, Kling, Seedance, PixVerse...) ---
     hf_api_key_id: str = ""
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
     s3_bucket: str = ""
+    s3_state_bucket: str = ""  # PRIVATE bucket for the SQLite DB + in-flight renders (holds the IG token)
     s3_public_base_url: str = ""  # e.g. https://pub-xxxx.r2.dev
 
     # --- Telegram review bot ---

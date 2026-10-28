@@ -92,3 +92,24 @@ def test_value_errors_are_reported_to_the_button(series, db):
     p.approve = boom
     Worker(p, db, "Asia/Kolkata").handle_update(_cb("a:3"))
     assert p.notifier.answers == ["job 3 is published"]
+
+
+class OrderPipeline(FakePipeline):
+    def __init__(self, series, log):
+        super().__init__(series)
+        self.log = log
+
+    def publish_due(self, now=None):
+        self.log.append("publish")
+        return []
+
+
+def test_run_once_order_resume_poll_generate_publish(series, db, monkeypatch):
+    log = []
+    p = OrderPipeline(series, log)
+    w = Worker(p, db, "Asia/Kolkata", poll_timeout=0)
+    monkeypatch.setattr(w, "resume_interrupted", lambda: log.append("resume"))
+    monkeypatch.setattr(w, "poll_telegram", lambda: log.append("poll"))
+    monkeypatch.setattr(w, "maybe_generate", lambda: log.append("generate"))
+    w.run_once()
+    assert log == ["resume", "poll", "generate", "publish"]
