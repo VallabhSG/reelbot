@@ -301,4 +301,4 @@ budget:
 schedule:
   generate_at: "10:00"
   publish_at: "19:30"
-  days: [mon, wed, fri]   # 3 a week at list: ~$25/mo Kling 3.0, ~$61 Seedance 2.0, ~$110 2.5
+  days: [tue, fri]
