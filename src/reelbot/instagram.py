@@ -63,16 +63,26 @@ class InstagramPublisher:
         return t
 
     def refresh_token_if_due(self, every: timedelta = timedelta(days=7)) -> bool:
-        """Long-lived tokens last ~60 days; refreshing weekly keeps them alive indefinitely."""
+        """Long-lived tokens last ~60 days; refreshing weekly keeps them alive indefinitely.
+
+        Instagram only refreshes tokens that are at least 24h old, so a brand-new token fails here.
+        A failed refresh never blocks publishing: the current token is still valid, and the next
+        publish simply tries again.
+        """
         last = self.db.kv_get(TOKEN_REFRESHED_KEY)
         if last and datetime.now(UTC) - datetime.fromisoformat(last) < every:
             return False
-        r = self.http.get(
-            f"{self.token_root}/refresh_access_token",
-            params={"grant_type": "ig_refresh_token", "access_token": self.token},
-        )
+        try:
+            r = self.http.get(
+                f"{self.token_root}/refresh_access_token",
+                params={"grant_type": "ig_refresh_token", "access_token": self.token},
+            )
+        except httpx.HTTPError as e:
+            log.warning("token refresh skipped (network): %s", e)
+            return False
         if r.status_code != 200:
-            raise InstagramError(f"token refresh failed: {r.status_code} {r.text[:300]}")
+            log.warning("token refresh skipped: %s %s", r.status_code, r.text[:200])
+            return False
         self.db.kv_set(TOKEN_KEY, r.json()["access_token"])
         self.db.kv_set(TOKEN_REFRESHED_KEY, datetime.now(UTC).isoformat(timespec="seconds"))
         return True

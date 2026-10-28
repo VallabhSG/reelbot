@@ -71,3 +71,15 @@ def test_token_refresh_is_stored_and_used(db):
     assert p.refresh_token_if_due() is True
     assert db.kv_get(TOKEN_KEY) == "newtoken" and p.token == "newtoken"
     assert p.refresh_token_if_due() is False  # not due again within a week
+
+
+@respx.mock
+def test_refresh_of_fresh_token_fails_soft(db):
+    # Instagram refuses to refresh tokens younger than 24h; that must not block the first post
+    respx.get(f"{G}/refresh_access_token").mock(
+        return_value=httpx.Response(400, json={"error": {"message": "token too new"}})
+    )
+    p = pub(db)
+    assert p.refresh_token_if_due() is False
+    assert p.token == "envtoken"
+    assert db.kv_get(TOKEN_KEY) is None
