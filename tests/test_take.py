@@ -214,3 +214,8 @@ def test_planner_explains_bookends_and_who_cannot_talk():
     sp = Planner(None, _talk_series()).system_prompt()
     assert "DIALOGUE BOOKENDS" in sp and "who can talk: Kai" in sp and "Mochi never talks" in sp
     assert '"line": str, "speaker": str' in sp
+
+
+def test_planner_asks_for_relatable_stakes_and_physical_spectacle(take_series):
+    sp = Planner(None, take_series).system_prompt()
+    assert "The stake is social and relatable" in sp and "Make the feeling PHYSICAL" in sp

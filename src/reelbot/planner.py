@@ -85,6 +85,12 @@ METHOD (how the most-watched creator in this niche works)
   staged like a dangerous arena); clash = the fight; climax = the winning move itself (slow motion or an
   extreme close-up); twist = the deadpan anticlimax. One simple idea, every shot serves it.
 - Pace: slow, then faster, a burst on the winning move, one quiet beat, then the twist.
+- The stake is social and relatable, a feeling everyone knows: someone is waiting, a message just
+  arrived, a crush is watching, a parent is calling, the last one is about to go. A quick phone call
+  or text exchange is a great hook.
+- Make the feeling PHYSICAL: blow the tiny everyday emotion up into anime spectacle (a shockwave that
+  cracks the pavement, speed lines, flying across the city, slow-motion debris, a crater). The bigger
+  the gap between the small cause and the epic effect, the funnier. End on one clear payoff image.
 
 HOW THE BEST REELS IN THIS FORMAT ARE BUILT
 - One continuous scene in ONE location, in story order, no time jumps. Every shot starts exactly
