@@ -26,41 +26,59 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
+      # Checked first so runs before setup exit in seconds instead of failing (and emailing) every 30 min.
+      - name: Check ENV_FILE secret
+        id: env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -z "$ENV_FILE" ]; then
+            echo "::notice::Repo secret ENV_FILE is not set yet; skipping this run."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.env.outputs.configured == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.env.outputs.configured == 'true'
         id: py
         with:
           python-version: "3.12"
 
       - name: Cache venv
-        id: venv
+        if: steps.env.outputs.configured == 'true'
         uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
 
       - name: Install reelbot
+        if: steps.env.outputs.configured == 'true'
         run: |
           if [ ! -x .venv/bin/python ]; then python -m venv .venv; fi
           .venv/bin/pip install -q -e ".[music]"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install ffmpeg
+        if: steps.env.outputs.configured == 'true'
         run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
 
       - name: Write .env
+        if: steps.env.outputs.configured == 'true'
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: |
-          if [ -z "$ENV_FILE" ]; then echo "::error::Repo secret ENV_FILE is not set"; exit 1; fi
-          printf '%s\n' "$ENV_FILE" > .env
+        run: printf '%s\n' "$ENV_FILE" > .env
 
       - name: Pull state
         id: pull
+        if: steps.env.outputs.configured == 'true'
         run: reelbot state pull
 
       - name: Run
+        if: steps.env.outputs.configured == 'true'
         run: reelbot ${{ inputs.command || 'tick' }}
 
       - name: Push state
