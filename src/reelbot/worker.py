@@ -72,6 +72,16 @@ class Worker:
         now = self.now()
         if not generation_due(self.p.s.schedule, now, self.db.kv_get(LAST_GEN_KEY)):
             return None
+        if missing := self.p.cast_missing():
+            # don't burn the day: wait until the cast is approved, remind once per day
+            nag_key = f"cast_nag:{now.date().isoformat()}"
+            if not self.db.kv_get(nag_key):
+                self.db.kv_set(nag_key, "1")
+                self.tg.send_message(
+                    f"🎭 Today's episode is waiting for the cast: no approved sheet for {', '.join(missing)}. "
+                    "Send /cast here (or run the 'cast' workflow) and pick one per character."
+                )
+            return None
         self.db.kv_set(LAST_GEN_KEY, now.date().isoformat())  # set first: never double-generate a day
         try:
             job_id = self.p.plan_next()
@@ -88,6 +98,22 @@ class Worker:
             self._handle_callback(cb)
         elif (msg := upd.get("message")) and msg.get("reply_to_message"):
             self._handle_reply(msg)
+        elif (msg := upd.get("message")) and (msg.get("text") or "").strip().lower().startswith("/cast"):
+            self._handle_cast_command(msg)
+
+    def _handle_cast_command(self, msg: dict[str, Any]) -> None:
+        if not self._authorized(msg.get("chat")):
+            return
+        args = msg["text"].split()[1:]
+        names = [c.name for c in self.p.s.characters if c.name.lower() in {a.lower() for a in args}] or None
+        self.tg.send_message("🎭 Drawing character sheets, they'll arrive here in a minute…")
+        try:
+            self.p.propose_cast(names)
+        except BudgetExceeded as e:
+            self.tg.send_message(f"⛔ {e}")
+        except Exception as e:
+            log.exception("cast failed")
+            self.tg.send_message(f"⚠️ Cast failed: {e}"[:1000])
 
     def _authorized(self, chat: dict[str, Any] | None) -> bool:
         return chat is not None and str(chat.get("id")) == str(self.tg.chat_id)
@@ -97,8 +123,12 @@ class Worker:
             log.warning("ignoring callback from unauthorized chat")
             return
         parts = (cb.get("data") or "").split(":")
-        action, job_id = parts[0], int(parts[1])
+        action = parts[0]
         msg_id = cb["message"]["message_id"]
+        if action in {"c", "cm"}:
+            self._handle_cast_callback(cb, parts, msg_id)
+            return
+        job_id = int(parts[1])
         try:
             if action == "a":
                 when = publish_time_for_approval(self.p.s.schedule, self.now())
@@ -130,6 +160,31 @@ class Worker:
         except Exception:
             log.exception("callback %s failed", cb.get("data"))
 
+    def _handle_cast_callback(self, cb: dict[str, Any], parts: list[str], msg_id: int) -> None:
+        name = parts[1]
+        try:
+            if parts[0] == "c":
+                self.p.approve_cast(name, int(parts[2]))
+                self.tg.answer_callback(cb["id"], f"{name} locked in")
+                self.tg.clear_keyboard(msg_id)
+                left = self.p.cast_missing()
+                tail = (
+                    f" Still to pick: {', '.join(left)}."
+                    if left
+                    else " Cast complete, episodes are unblocked."
+                )
+                self.tg.send_message(f"🎭 {name} locked in.{tail}", reply_to=msg_id)
+            else:
+                self.tg.answer_callback(cb["id"], f"More {name} options…")
+                self.tg.clear_keyboard(msg_id)
+                self.p.propose_cast([name])
+        except (ValueError, KeyError) as e:
+            self.tg.send_message(f"⚠️ {e}", reply_to=msg_id)
+        except BudgetExceeded as e:
+            self.tg.send_message(f"⛔ {e}")
+        except Exception:
+            log.exception("cast callback %s failed", cb.get("data"))
+
     def _handle_reply(self, msg: dict[str, Any]) -> None:
         if not self._authorized(msg.get("chat")) or not msg.get("text"):
             return
@@ -145,7 +200,10 @@ class Worker:
         updates = self.tg.get_updates(int(offset) if offset else None, timeout=self.poll_timeout)
         for upd in updates:
             self.db.kv_set(TG_OFFSET_KEY, str(upd["update_id"] + 1))  # ack before handling: no replays
-            self.handle_update(upd)
+            try:
+                self.handle_update(upd)
+            except Exception:  # one bad update must never stall the run (or the ones after it)
+                log.exception("telegram update %s failed", upd.get("update_id"))
 
     # ---------------------------------------------------------------- loop
     def tick(self) -> None:

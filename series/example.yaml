@@ -1,113 +1,78 @@
 # One file = one account's series. Copy, rename, and point SERIES_FILE at it.
-# Asset paths are relative to the repo root.
+# Asset paths are relative to the repo root. See everyday-boss-fights.yaml for a full, live example.
 
 series:
   name: "NIGHT SHIFT"
   handle: "yourhandle"
   premise: >
-    100 jobs that keep a city alive after dark. Each episode is one night worker's
-    sixty seconds of quiet heroism, told as a wordless anime micro-film with a twist ending.
+    100 jobs that keep a city alive after dark. Each episode is one night worker's sixty seconds of
+    quiet heroism, told as a wordless anime micro-film in five beats with a twist ending.
   total_episodes: 100
-  # first block of every caption, like "1 SPORT A DAY / Day 39 / 100 / 🍂 Leafboarding"
   header_template: "{series}\nNight {n} / {total}\n{emoji} {category}"
 
 style:
-  # appended to every keyframe prompt -> keeps the look consistent across the series
   bible: >
-    cinematic 2D anime film still, hand-painted backgrounds, soft film grain, volumetric light,
-    shallow depth of field, rich teal and amber night palette, dynamic composition, vertical 9:16 frame
-  negative: "text, watermark, logo, extra fingers, deformed hands, blurry, low quality"
-  motion_suffix: "smooth cinematic camera motion, consistent character, no cuts"
+    2D anime feature-film look: clean ink linework, cel-shaded characters with soft painterly gradients,
+    hand-painted backgrounds, teal-and-amber night grade, atmospheric haze, dynamic composition
+  negative: "No on-screen text, no subtitles, no logos, no watermarks, no extra characters."
 
-# Optional recurring cast. Reference images are uploaded to Higgsfield and passed to models that
-# accept reference images (e.g. Seedance reference-to-video). Leave empty for one-off characters.
-characters: []
-#  - name: Kai
-#    description: "lanky 20s courier, messy black hair, round glasses, oversized orange jacket"
-#    reference_images: [assets/characters/kai_front.png, assets/characters/kai_side.png]
+# Recurring cast: `reelbot cast` draws sheet options, you pick one per character in Telegram,
+# and every shot then gets that sheet as a reference image.
+characters:
+  - name: Kai
+    short: "lanky courier in round glasses and an orange jacket"
+    description: "Kai, a lanky courier in his 20s with messy black hair, round glasses and an oversized orange jacket"
 
-# Planned calendar. Episode N uses entry N; past the end, the planner invents new categories.
+cast:
+  candidates: 3
+  aspect_ratio: "16:9"
+
 episodes:
   - {category: "Night metro driver", emoji: "🚇", idea: "last train, one passenger who never gets off"}
   - {category: "Bridge lamp keeper", emoji: "🏮"}
   - {category: "Rooftop courier", emoji: "📦"}
-  - {category: "Night baker", emoji: "🥐"}
-  - {category: "Tow truck driver", emoji: "🚚"}
-  - {category: "Lighthouse keeper", emoji: "🗼"}
-  - {category: "Hospital night nurse", emoji: "🩺"}
-  - {category: "Street food cook", emoji: "🍜"}
-  - {category: "Radio DJ", emoji: "📻"}
-  - {category: "Snowplow operator", emoji: "❄️"}
 
 shots:
-  count: 3          # 3 x 5s = 15s reel
-  duration_s: 5
+  count: 5          # hook / escalate / clash / climax / twist
+  duration_s: 3
 
-# ---------------------------------------------------------------------------------------------
-# Models: everything runs through the Higgsfield API (it fronts Kling, Seedance, PixVerse, Soul...).
-# Endpoint IDs + input field names come from each model's API page on console.higgsfield.ai.
-# `input` is a template. Placeholders: {prompt} {negative_prompt} {image_url} {image_urls}
-# {reference_urls} {duration} {duration_str} {aspect_ratio}. Exact "{x}" keeps the raw type.
-# Prices are what the budget guard charges against your caps; keep them in sync with Higgsfield.
-# ---------------------------------------------------------------------------------------------
+# Endpoint IDs + input field names come from each model's API page on open.higgsfield.ai.
+# Placeholders: {prompt} {image_urls} {image_url} {duration} {aspect_ratio} {negative_prompt}.
+# Exact "{x}" keeps the raw type; empty lists/None are dropped from the request.
 models:
-  # Soul 2 text-to-image, $0.0032/img at 720p (open.higgsfield.ai, Oct 2026). Tuned for realism; if the
-  # anime look is weak, try alibaba/z-image/turbo ($0.015) or xai/grok-imagine-image-2.0 ($0.04).
   image:
-    endpoint: "higgsfield-ai/soul/v2/standard"
+    endpoint: "xai/grok-imagine-image-2.0"
     input:
       prompt: "{prompt}"
+      image_urls: "{image_urls}"
       aspect_ratio: "{aspect_ratio}"
-      resolution: "720p"
-      batch_size: 1
-      enhance_prompt: true
+      quality: "medium"
+      resolution: "1k"
     output_path: "images.0.url"
-    cost_per_call: 0.0032
-
-  # Budget tier: Kling 2.5 Turbo Standard image-to-video, 720p, 5 or 10s clips.
-  # Listed at $0.042/s ($0.021/s during the current 50% promo); the guard charges list price.
+    cost_per_call: 0.04
   video:
-    endpoint: "kling-video/v2.5-turbo/standard/image-to-video"
+    endpoint: "kling-video/v4.0/reference-to-video"
     input:
       prompt: "{prompt}"
-      image_url: "{image_url}"
+      image_urls: "{image_urls}"
       duration: "{duration}"
-      cfg_scale: 0.5
-      negative_prompt: "{negative_prompt}"
+      resolution: "720p"
+      aspect_ratio: "{aspect_ratio}"
     output_path: "video.url"
-    cost_per_second: 0.042
-
-  # Premium tier: Seedance 2.5 reference-to-video (what he credits). Schema from docs.higgsfield.ai.
-  # Listed from $0.206/s ($0.144/s promo) -> ~$3/reel at list. Raise budget.per_reel_usd to 3.5 first.
-  # video:
-  #   endpoint: "bytedance/seedance-2.5/reference-to-video"
-  #   input:
-  #     prompt: "{prompt}"
-  #     image_urls: ["{image_url}", "{reference_urls}"]
-  #     duration: "{duration}"
-  #     resolution: "720p"
-  #     aspect_ratio: "9:16"
-  #     generate_audio: false
-  #     bitrate_mode: "high"
-  #   output_path: "video.url"
-  #   cost_per_second: 0.206
+    cost_per_second: 0.157
+    ref_token: "@image_{n}"
 
 music:
   provider: elevenlabs   # elevenlabs | library (assets/music, tracks you own) | none
   library_dir: assets/music
-  cost_per_track: 0.0    # ElevenLabs is a subscription; track it outside the per-call budget
+  cost_per_track: 0.0
   volume_db: -2.0
 
 title_card:
-  font: assets/fonts/title.ttf   # drop in a brush/display font you're licensed to use
+  font: assets/fonts/Bangers-Regular.ttf
   subtitle: "A FILM BY {handle}"
-  show_from: 0.3
-  show_until: 2.8
-  color: "#FFFFFF"
-  stroke_color: "#111111"
-  stroke_width: 6
-  y_ratio: 0.62
-  cover_offset_ms: 1200   # Reels cover frame, lands while the title is on screen
+  in_video: false
+  cover: true
 
 caption:
   template: "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
@@ -116,9 +81,9 @@ caption:
 
 budget:
   monthly_usd: 40
-  per_reel_usd: 2.5      # first take ~$0.64; leaves room for ~2-3 shot regenerations
+  per_reel_usd: 4.0
 
 schedule:
-  generate_at: "10:00"   # local time (TIMEZONE); preview lands in Telegram ~10-20 min later
-  publish_at: "19:30"    # approved before this -> posts at this time; after -> posts immediately
-  days: [mon, tue, wed, thu, fri, sat, sun]
+  generate_at: "10:00"
+  publish_at: "19:30"
+  days: [mon, wed, fri]

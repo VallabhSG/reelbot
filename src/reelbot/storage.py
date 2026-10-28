@@ -3,6 +3,7 @@ an S3-compatible bucket (Cloudflare R2 has free egress, which suits this)."""
 
 from __future__ import annotations
 
+import mimetypes
 import uuid
 from pathlib import Path
 from typing import Protocol
@@ -34,7 +35,8 @@ class S3Storage:
 
     def put_public(self, path: Path, key_prefix: str) -> tuple[str, str]:
         key = f"{key_prefix.strip('/')}/{uuid.uuid4().hex}{path.suffix}"
-        self.client.upload_file(str(path), self.bucket, key, ExtraArgs={"ContentType": "video/mp4"})
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        self.client.upload_file(str(path), self.bucket, key, ExtraArgs={"ContentType": content_type})
         return key, f"{self.public_base}/{key}"
 
     def delete(self, key: str) -> None:

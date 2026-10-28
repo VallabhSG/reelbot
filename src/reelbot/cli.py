@@ -11,11 +11,13 @@ reelbot run                   long-running worker (schedule + Telegram review + 
 reelbot tick                  one worker pass, for cron hosts (GitHub Actions)
 reelbot state pull|push       sync DB + in-flight renders with the private state bucket
 reelbot smoke                 verify every live service (1 test image, no posting)
+reelbot cast [NAME ...]       draw character-sheet options and send them to Telegram to pick
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import shutil
 import sys
@@ -61,6 +63,11 @@ def cmd_check(_: argparse.Namespace) -> int:
         f"  est. ${per_reel:.2f}/reel (first take) · ~${per_month:.2f}/month at {len(series.schedule.days)}/week"
         f" · cap ${series.budget.monthly_usd:.2f}/month, ${series.budget.per_reel_usd:.2f}/reel"
     )
+    if series.characters:
+        print(
+            f"  cast sheets (one-time): ~${series.estimate_cast_cost():.2f} for "
+            f"{len(series.characters)} characters × {series.cast.candidates} options"
+        )
     if per_month > series.budget.monthly_usd:
         print("  ! schedule would exceed the monthly cap before month end; the guard will stop generation")
     for tool in ("ffmpeg", "ffprobe"):
@@ -104,13 +111,18 @@ def cmd_status(_: argparse.Namespace) -> int:
     statuses = list(JobStatus)
     jobs = app.db.jobs_with_status(*statuses)[-15:]
     for j in jobs:
-        plan = app.db.plan(j["id"])
+        title = json.loads(j["plan_json"]).get("title", "?")  # raw: old-format plans still list
         cost = app.db.spend_for_job(j["id"])
         print(
-            f"#{j['id']:<4} ep{j['episode_no']:<4} {j['status']:<16} ${cost:5.2f}  {plan.title}"
+            f"#{j['id']:<4} ep{j['episode_no']:<4} {j['status']:<16} ${cost:5.2f}  {title}"
             + (f"  ! {j['error'][:80]}" if j["error"] else "")
         )
     print(f"month spend: ${app.guard.month_spend():.2f} / ${app.series.budget.monthly_usd:.2f}")
+    cast = app.pipeline.cast_urls()
+    print(
+        "cast: "
+        + ", ".join(f"{c.name} {'✓' if c.name in cast else '✗ (run cast)'}" for c in app.series.characters)
+    )
     return 0
 
 
@@ -163,6 +175,14 @@ def cmd_state(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cast(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    names = [c.name for c in app.series.characters if c.name.lower() in {n.lower() for n in a.names}] or None
+    out = app.pipeline.propose_cast(names)
+    print("sent options to Telegram: " + ", ".join(f"{k} ×{len(v)}" for k, v in out.items()))
+    return 0
+
+
 def cmd_smoke(_: argparse.Namespace) -> int:
     from .smoke import run_smoke
 
@@ -199,6 +219,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("action", choices=["pull", "push"])
     p.set_defaults(fn=cmd_state)
     sub.add_parser("smoke").set_defaults(fn=cmd_smoke)
+    p = sub.add_parser("cast")
+    p.add_argument("names", nargs="*")
+    p.set_defaults(fn=cmd_cast)
     args = ap.parse_args(argv)
     return args.fn(args)
 

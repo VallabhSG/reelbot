@@ -1,4 +1,9 @@
-"""LLM planner: turns the series bible + episode number into a validated EpisodePlan."""
+"""LLM planner: series bible + episode number -> a validated, rule-checked storyboard.
+
+The LLM only fills structured fields (beat, shot size, angle, camera, cast, one action, light);
+storyboard.compose_shot_prompt turns them into model prompts with a fixed formula, so prompt
+quality doesn't depend on the LLM's prose.
+"""
 
 from __future__ import annotations
 
@@ -7,57 +12,69 @@ import logging
 
 from pydantic import ValidationError
 
-from .models import EpisodePlan
+from .models import BEATS, EpisodePlan
 from .providers import JSONChat
 from .series import Series
+from .storyboard import normalise, storyboard_problems
 
 log = logging.getLogger(__name__)
 
-SYSTEM = """You are the showrunner of a short-form AI animation series on Instagram Reels.
-Each episode is a {seconds}-second silent micro-film told in exactly {n} shots, followed by music.
-The story must land visually with no dialogue: setup, escalation, a twist or payoff in the last shot.
+SYSTEM = """You are the director of a wordless anime micro-film series for Instagram Reels.
+Each episode is {seconds} seconds: exactly {n} shots of {shot_s} seconds, then music. No dialogue,
+no on-screen text: the story must read from the pictures alone.
 
 SERIES: {name}
 PREMISE: {premise}
-VISUAL STYLE (applies to every shot): {style}
-RECURRING CHARACTERS:
+RECURRING CAST (reference images are supplied automatically; never describe their looks):
 {characters}
 
-Rules:
-- title: 1-2 punchy words, ALL CAPS, max 14 characters, used on the title card.
-- hook: the caption opener. 1-2 short lines, curiosity gap, no hashtags, no emojis except an optional one at start.
-- keyframe_prompt: a single still frame. Describe subject, pose, setting, lighting, lens/composition, 9:16
-  vertical framing. Name recurring characters by their description, not just their name. Do NOT restate the
-  style; it is appended automatically.
-- motion_prompt: only what moves: camera move + subject action within ~{shot_s}s. One clear action per shot.
-- music_prompt: genre, mood, tempo, instruments, "instrumental". Never name real artists, songs or films.
-- Never use copyrighted characters, brands, logos, real people or real sports teams.
+STORYBOARD RULES
+- Beats, in this exact order: {beats}.
+  hook = an instantly readable situation with stakes in the first second;
+  escalate = the character commits, tension rises;
+  clash = the big dynamic action, energy, motion;
+  climax = the decisive instant, often a close or slow-motion moment;
+  twist = a deadpan, funny anticlimax that recontextualises everything.
+- Shot sizes: EWS, WS, MS, MCU, CU, ECU. Never the same size twice in a row. At least one CU or ECU
+  and at least one WS or EWS. Vary angles: eye level, low angle, high angle, overhead, POV, dutch angle.
+- camera: exactly ONE physical move per shot, e.g. "static locked-off", "slow push-in", "fast push-in",
+  "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "handheld follow",
+  "whip pan", "slow-motion speed ramp" (only on climax).
+- action: ONE action with a concrete verb and a visible end state, max 25 words. Refer to cast by name
+  only. No dialogue, no thoughts, no text, no signs.
+- cast: names from the cast list in that shot (max 2), [] for an empty shot.
+- ONE location for the whole episode. location.plate_prompt describes that place EMPTY (no people, no
+  animals), with time of day, weather and light, and blank, unreadable signage.
+- light: direction + colour temperature, consistent across shots (same time of day).
+- hook (the caption, not a shot): 1-2 short lines, curiosity gap, no hashtags.
+- music_prompt: genre, mood, tempo, instruments, "instrumental". Never real artists or songs.
+- Never use copyrighted characters, brands, logos, real people or real teams.
 
 Respond with JSON only:
-{{"title": str, "category": str, "emoji": str, "logline": str, "hook": str,
-  "shots": [{{"keyframe_prompt": str, "motion_prompt": str}}, ...exactly {n}],
+{{"title": str (1-2 words, max 14 chars), "category": str, "emoji": str, "logline": str, "hook": str,
+  "location": {{"name": str, "plate_prompt": str}},
+  "shots": [{{"beat": str, "size": str, "angle": str, "camera": str, "cast": [str], "action": str,
+              "light": str}}, ... exactly {n}],
   "music_prompt": str}}"""
 
 
 class Planner:
-    def __init__(self, llm: JSONChat, series: Series, max_attempts: int = 3):
+    def __init__(self, llm: JSONChat, series: Series, max_attempts: int = 4):
         self.llm = llm
         self.series = series
         self.max_attempts = max_attempts
 
     def system_prompt(self) -> str:
         s = self.series
-        chars = (
-            "\n".join(f"- {c.name}: {c.description}" for c in s.characters) or "- (none; invent per episode)"
-        )
+        chars = "\n".join(f"- {c.name}: {c.description}" for c in s.characters) or "- (none)"
         return SYSTEM.format(
             seconds=s.shots.count * s.shots.duration_s,
             n=s.shots.count,
             shot_s=s.shots.duration_s,
             name=s.series.name,
             premise=s.series.premise,
-            style=s.style.bible,
             characters=chars,
+            beats=" -> ".join(BEATS[: s.shots.count]) if s.shots.count == len(BEATS) else "free",
         )
 
     def user_prompt(self, episode_no: int, past_titles: list[str], feedback: str = "") -> str:
@@ -76,7 +93,7 @@ class Planner:
         if past_titles:
             lines.append("Already used (do not repeat titles or premises): " + "; ".join(past_titles))
         if feedback:
-            lines.append(f"Your previous answer was invalid: {feedback}. Fix it.")
+            lines.append(f"Your previous answer broke these rules: {feedback}. Fix them and answer again.")
         return "\n".join(lines)
 
     def plan(self, episode_no: int, past_titles: list[str]) -> EpisodePlan:
@@ -91,11 +108,12 @@ class Planner:
                 feedback = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
                 log.warning("plan attempt %d invalid: %s", attempt, feedback)
                 continue
-            n = self.series.shots.count
-            if len(plan.shots) < n:
-                feedback = f"needed exactly {n} shots, got {len(plan.shots)}"
+            problems = storyboard_problems(self.series, plan)
+            if problems:
+                feedback = "; ".join(problems)
+                log.warning("plan attempt %d breaks storyboard rules: %s", attempt, feedback)
                 continue
-            plan.shots = plan.shots[:n]
+            plan = normalise(self.series, plan)
             seed = (
                 self.series.episodes[episode_no - 1] if episode_no - 1 < len(self.series.episodes) else None
             )

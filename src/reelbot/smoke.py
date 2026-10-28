@@ -66,6 +66,7 @@ def run_smoke(s: Settings) -> int:
             {
                 "prompt": f"test frame: quiet neon street at night. {series.style.bible}",
                 "aspect_ratio": "9:16",
+                "image_urls": [],
                 "negative_prompt": None,
             },
             job_id=None,

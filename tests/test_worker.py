@@ -113,3 +113,50 @@ def test_run_once_order_resume_poll_generate_publish(series, db, monkeypatch):
     monkeypatch.setattr(w, "maybe_generate", lambda: log.append("generate"))
     w.run_once()
     assert log == ["resume", "poll", "generate", "publish"]
+
+
+class CastPipeline(FakePipeline):
+    def __init__(self, series, missing):
+        super().__init__(series)
+        self.missing = missing
+        self.planned = 0
+
+    def cast_missing(self):
+        return self.missing
+
+    def approve_cast(self, name, idx):
+        self.calls.append(("cast", name, idx))
+        self.missing = [m for m in self.missing if m != name]
+
+    def propose_cast(self, names=None):
+        self.calls.append(("propose", names))
+
+    def plan_next(self):
+        self.planned += 1
+        return 1
+
+    def generate(self, job_id):
+        self.calls.append(("generate", job_id))
+
+
+def test_generation_waits_for_cast_and_nags_once_a_day(series, db, monkeypatch):
+    p = CastPipeline(series, ["Kai"])
+    w = Worker(p, db, "Asia/Kolkata")
+    wed_11 = datetime(2026, 10, 28, 11, 0, tzinfo=IST)
+    monkeypatch.setattr(w, "now", lambda: wed_11)
+    assert w.maybe_generate() is None and w.maybe_generate() is None
+    assert p.planned == 0 and db.kv_get("last_generation_date") is None  # the day is not burned
+    assert sum("waiting for the cast" in m for m in p.notifier.messages) == 1
+    p.missing = []
+    assert w.maybe_generate() == 1 and ("generate", 1) in p.calls
+
+
+def test_cast_buttons_and_command(series, db):
+    p = CastPipeline(series, ["Kai"])
+    w = Worker(p, db, "Asia/Kolkata")
+    w.handle_update(_cb("c:Kai:2"))
+    w.handle_update(_cb("cm:Kai"))
+    w.handle_update({"message": {"text": "/cast kai", "chat": {"id": 42}}})
+    w.handle_update({"message": {"text": "/cast", "chat": {"id": 666}}})  # unauthorized: ignored
+    assert p.calls == [("cast", "Kai", 2), ("propose", ["Kai"]), ("propose", ["Kai"])]
+    assert any("Cast complete" in m for m in p.notifier.messages)

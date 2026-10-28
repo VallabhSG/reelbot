@@ -11,7 +11,7 @@ on:
       command:
         description: "reelbot command"
         type: choice
-        options: [tick, smoke, make, status, check]
+        options: [tick, cast, smoke, make, status, check]
         default: tick
 
 concurrency:

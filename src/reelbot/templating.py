@@ -5,7 +5,7 @@ series YAML instead of hard-coded. Rules:
   * a string that is exactly "{key}" is replaced by the raw value (keeps lists / ints intact)
   * "{key}" inside a longer string is replaced by str(value)
   * a list item that is exactly "{key}" whose value is a list is spliced in
-  * keys whose rendered value is None are dropped
+  * keys whose rendered value is None or an empty list are dropped (APIs reject `"image_urls": []`)
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def render(template: Any, ctx: dict[str, Any]) -> Any:
         return out
     if isinstance(template, dict):
         rendered = {k: render(v, ctx) for k, v in template.items()}
-        return {k: v for k, v in rendered.items() if v is not None}
+        return {k: v for k, v in rendered.items() if v is not None and v != []}
     return template
 
 

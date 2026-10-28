@@ -1,39 +1,47 @@
-# EVERYDAY BOSS FIGHTS — @everydaybossfights
-# Ordinary life problems, animated like a shonen final-boss battle, with an anticlimax twist.
+# EVERYDAY BOSS FIGHTS — @everydaybossfights  (v2: storyboard + character sheets + Kling 4.0 refs)
+# Ordinary life problems, animated like a shonen final-boss battle, with a deadpan anticlimax.
 
 series:
   name: "EVERYDAY BOSS FIGHTS"
   handle: "everydaybossfights"
   premise: >
-    Every episode, Juno fights one tiny everyday problem as if it were the final boss of an
-    anime: the last metro, a 2% phone battery, a pickle jar that will not open. Three beats, always:
-    SHOT 1 the ordinary moment and the stakes (calm, relatable, slightly tense);
-    SHOT 2 the boss fight: the mundane task shown as an epic shonen battle with power aura, speed
-    lines, debris, dramatic low angles and impact-frame energy;
-    SHOT 3 the anticlimax: a deadpan, funny twist that undercuts the epic (often Mochi the cat, or
-    the problem solving itself in the dumbest way). Wordless, no on-screen text. Universal, not
-    tied to one country. Wholesome humour; never cruel, never romantic.
+    Every episode, Juno fights one tiny everyday problem as if it were the final boss of an anime:
+    the last metro, a 2% phone battery, a pickle jar that will not open. Five wordless beats:
+    hook (the ordinary moment and its stakes), escalate (she commits, power aura flickers on),
+    clash (the mundane task staged as an epic shonen battle: speed lines, debris, low hero angles),
+    climax (the decisive instant, often slow motion or an extreme close-up), twist (a deadpan
+    anticlimax: Mochi steals the win, or the problem solves itself in the dumbest way).
+    Universal, not tied to one country. Wholesome humour; never cruel, never romantic.
   total_episodes: 100
   header_template: "{series}\nBoss {n} / {total}\n{emoji} {category}"
 
 style:
+  # appended to every shot and plate prompt (keep it descriptive; no studio or artist names)
   bible: >
-    2D Japanese anime film still, clean bold ink linework, cel shading, vibrant saturated colors,
-    cinematic lighting with warm rim light, detailed modern city setting, expressive faces,
-    vertical 9:16 composition, high detail, consistent character design
-  negative: "text, letters, watermark, logo, signature, extra fingers, deformed hands, extra limbs, blurry, low quality, 3D render, photorealistic"
-  motion_suffix: "anime style motion, smooth dynamic camera, consistent character design, no cuts"
+    2D anime feature-film look: confident clean ink linework, cel-shaded characters with soft painterly
+    gradients, hand-painted brush-textured backgrounds, cinematic colour grade with warm highlights and
+    cool shadows, atmospheric haze and soft bloom, dynamic composition, expressive acting, crisp detail
+  negative: >
+    No on-screen text, no subtitles, no captions, no logos, no watermarks, no extra characters,
+    no distorted faces or hands.
 
 characters:
   - name: Juno
+    short: "teal-haired girl in an oversized mustard hoodie"
     description: >
-      Juno, a 20-something young woman with a short messy teal bob haircut, a small band-aid on her
-      left cheek, an oversized mustard-yellow hoodie, black cargo shorts and chunky white high-top
-      sneakers; determined amber eyes
-    reference_images: []   # add after launch: pick the best Juno frames, used by Seedance later
+      Juno, a young woman in her early 20s with a short messy teal bob, amber eyes, a small band-aid on
+      her left cheek, an oversized mustard-yellow hoodie with no logo, black cargo shorts and chunky white
+      high-top sneakers; slim, energetic, expressive
   - name: Mochi
-    description: "Mochi, a chubby orange tabby cat with a tiny red scarf and an unimpressed expression"
-    reference_images: []
+    short: "chubby orange tabby cat with a red scarf"
+    description: >
+      Mochi, a chubby orange tabby cat with white paws, a tiny red knitted scarf and a permanently
+      unimpressed half-lidded expression
+
+cast:
+  candidates: 3        # options per character to pick from in Telegram (~$0.04 each)
+  aspect_ratio: "16:9" # turnaround sheets read best wide
+
 
 # Episode N uses entry N. Past the end, the planner invents new bosses in the same spirit.
 episodes:
@@ -69,31 +77,37 @@ episodes:
   - {category: "The Last Stair", emoji: "🪜", idea: "carrying a heavy box up endless stairs like climbing a mountain; twist: the elevator dings open beside her"}
 
 shots:
-  count: 3          # setup / boss fight / twist, 3 x 5s = 15s
-  duration_s: 5
+  count: 5          # hook / escalate / clash / climax / twist
+  duration_s: 3     # 5 x 3 s = 15 s, ~3 s per cut like the reference reels
 
-# Model blocks verified against open.higgsfield.ai (Oct 2026). See series/example.yaml for notes.
 models:
+  # Character sheets + one empty location plate per episode. Takes reference images, so it can
+  # also keep looks consistent. ~$0.04/image (open.higgsfield.ai, Oct 2026).
   image:
-    endpoint: "higgsfield-ai/soul/v2/standard"
+    endpoint: "xai/grok-imagine-image-2.0"
     input:
       prompt: "{prompt}"
+      image_urls: "{image_urls}"
       aspect_ratio: "{aspect_ratio}"
-      resolution: "720p"
-      batch_size: 1
-      enhance_prompt: true
+      quality: "medium"
+      resolution: "1k"
     output_path: "images.0.url"
-    cost_per_call: 0.0032
+    cost_per_call: 0.04
+
+  # Kling 4.0 Reference-to-Video (released 23 Oct 2026): every shot gets the cast sheets + the
+  # location plate as @image_N references. 720p, 9:16. List $0.157/s, $0.1099/s on the current
+  # 30%-off promo; the guard charges list price.
   video:
-    endpoint: "kling-video/v2.5-turbo/standard/image-to-video"
+    endpoint: "kling-video/v4.0/reference-to-video"
     input:
       prompt: "{prompt}"
-      image_url: "{image_url}"
+      image_urls: "{image_urls}"
       duration: "{duration}"
-      cfg_scale: 0.5
-      negative_prompt: "{negative_prompt}"
+      resolution: "720p"
+      aspect_ratio: "{aspect_ratio}"
     output_path: "video.url"
-    cost_per_second: 0.042   # list price; currently billed at $0.021 (promo)
+    cost_per_second: 0.157
+    ref_token: "@image_{n}"
 
 music:
   provider: elevenlabs
@@ -104,13 +118,12 @@ music:
 title_card:
   font: assets/fonts/Bangers-Regular.ttf   # SIL OFL 1.1, see Bangers-OFL.txt
   subtitle: "BOSS FIGHT #{nn}"
-  show_from: 0.2
-  show_until: 2.6
   color: "#FFC93C"          # brand mustard yellow, matches Juno's hoodie
   stroke_color: "#14110F"
   stroke_width: 10
   y_ratio: 0.70
-  cover_offset_ms: 1200
+  in_video: false           # keep the hook shot clean ...
+  cover: true               # ... and use climax frame + title as the Reels poster cover
 
 caption:
   template: "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
@@ -119,9 +132,9 @@ caption:
 
 budget:
   monthly_usd: 40
-  per_reel_usd: 2.5
+  per_reel_usd: 4.0       # first take ~$2.40 at list; leaves room for ~3 shot redos
 
 schedule:
   generate_at: "10:00"
   publish_at: "19:30"
-  days: [mon, tue, wed, thu, fri, sat, sun]
+  days: [mon, wed, fri]   # 3 reels a week (~$31/month at list price)

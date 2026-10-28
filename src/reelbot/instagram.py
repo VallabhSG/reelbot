@@ -105,14 +105,18 @@ class InstagramPublisher:
         r.raise_for_status()
         return r.json()
 
-    def create_reel_container(self, video_url: str, caption: str, thumb_offset_ms: int | None) -> str:
+    def create_reel_container(
+        self, video_url: str, caption: str, thumb_offset_ms: int | None, cover_url: str | None = None
+    ) -> str:
         params: dict[str, Any] = {
             "media_type": "REELS",
             "video_url": video_url,
             "caption": caption,
             "share_to_feed": "true",
         }
-        if thumb_offset_ms is not None:
+        if cover_url:
+            params["cover_url"] = cover_url
+        elif thumb_offset_ms is not None:
             params["thumb_offset"] = str(thumb_offset_ms)
         return self._req("POST", f"{self.ig_user_id}/media", **params)["id"]
 
@@ -134,8 +138,17 @@ class InstagramPublisher:
     def publish(self, container_id: str) -> str:
         return self._req("POST", f"{self.ig_user_id}/media_publish", creation_id=container_id)["id"]
 
-    def publish_reel(self, video_url: str, caption: str, thumb_offset_ms: int | None = None) -> str:
-        cid = self.create_reel_container(video_url, caption, thumb_offset_ms)
+    def publish_reel(
+        self, video_url: str, caption: str, thumb_offset_ms: int | None = None, cover_url: str | None = None
+    ) -> str:
+        try:
+            cid = self.create_reel_container(video_url, caption, thumb_offset_ms, cover_url)
+        except InstagramError as e:
+            if not cover_url:
+                raise
+            # a cover problem must never block the post: fall back to a frame from the video
+            log.warning("container with cover_url refused (%s); retrying without it", e)
+            cid = self.create_reel_container(video_url, caption, thumb_offset_ms)
         log.info("ig container %s created", cid)
         self.wait_container(cid)
         media_id = self.publish(cid)
@@ -152,12 +165,16 @@ class InstagramPublisher:
 class DryRunPublisher:
     def __init__(self) -> None:
         self.published: list[tuple[str, str]] = []
+        self.covers: list[str | None] = []
 
     def refresh_token_if_due(self, every: timedelta = timedelta(days=7)) -> bool:
         return False
 
-    def publish_reel(self, video_url: str, caption: str, thumb_offset_ms: int | None = None) -> str:
+    def publish_reel(
+        self, video_url: str, caption: str, thumb_offset_ms: int | None = None, cover_url: str | None = None
+    ) -> str:
         self.published.append((video_url, caption))
+        self.covers.append(cover_url)
         return f"dryrun-{len(self.published)}"
 
     def permalink(self, media_id: str) -> str | None:

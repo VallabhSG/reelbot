@@ -83,3 +83,20 @@ def test_refresh_of_fresh_token_fails_soft(db):
     assert p.refresh_token_if_due() is False
     assert p.token == "envtoken"
     assert db.kv_get(TOKEN_KEY) is None
+
+
+@respx.mock
+def test_cover_url_is_sent_and_falls_back_without_it(db):
+    route = respx.post(f"{G}/17841/media").mock(
+        side_effect=[
+            httpx.Response(400, json={"error": {"message": "bad cover"}}),
+            httpx.Response(200, json={"id": "C3"}),
+        ]
+    )
+    respx.get(f"{G}/C3").mock(return_value=httpx.Response(200, json={"status_code": "FINISHED"}))
+    respx.post(f"{G}/17841/media_publish").mock(return_value=httpx.Response(200, json={"id": "M3"}))
+    assert pub(db).publish_reel("https://cdn/r.mp4", "c", 1200, cover_url="https://cdn/cover.jpg") == "M3"
+    first = parse_qs(route.calls[0].request.content.decode())
+    second = parse_qs(route.calls[1].request.content.decode())
+    assert first["cover_url"] == ["https://cdn/cover.jpg"] and "thumb_offset" not in first
+    assert "cover_url" not in second and second["thumb_offset"] == ["1200"]

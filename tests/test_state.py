@@ -40,7 +40,18 @@ def _plan() -> EpisodePlan:
         logline="l",
         hook="h",
         music_prompt="m",
-        shots=[{"keyframe_prompt": "a long enough prompt", "motion_prompt": "slow pan"}],
+        location={"name": "a place", "plate_prompt": "an empty place at night, cold light"},
+        shots=[
+            {
+                "beat": "hook",
+                "size": "WS",
+                "angle": "eye level",
+                "camera": "static",
+                "cast": [],
+                "action": "the door slams shut",
+                "light": "cold key",
+            }
+        ],
     )
 
 

@@ -11,8 +11,22 @@ from pydantic import BaseModel, Field, model_validator
 
 class Character(BaseModel):
     name: str
-    description: str
-    reference_images: list[Path] = Field(default_factory=list)
+    description: str  # full design, used for the one-time character sheet
+    short: str = ""  # a few words repeated in every shot prompt next to the reference tag
+    reference_images: list[Path] = Field(default_factory=list)  # optional hand-made refs (else: cast)
+
+
+class CastSpec(BaseModel):
+    """One-time character sheets: generated, approved in Telegram, then reused in every shot."""
+
+    candidates: int = Field(3, ge=1, le=6)
+    aspect_ratio: str = "16:9"
+    sheet_template: str = (
+        "Character reference sheet for an animated film: {description}. Full-body front view, "
+        "three-quarter view, side profile, and three facial expressions (neutral, determined, surprised), "
+        "same design in every view, plain light-grey background, even studio lighting. {style} "
+        "No text, no labels, no watermark."
+    )
 
 
 class EpisodeSeed(BaseModel):
@@ -50,6 +64,7 @@ class ModelSpec(BaseModel):
     output_path: str
     cost_per_call: float = 0.0
     cost_per_second: float = 0.0
+    ref_token: str = "@image_{n}"  # how this model addresses reference images inside the prompt
 
     def estimate(self, seconds: float = 0.0) -> float:
         return round(self.cost_per_call + self.cost_per_second * seconds, 4)
@@ -77,7 +92,9 @@ class TitleCard(BaseModel):
     stroke_color: str = "#111111"
     stroke_width: int = 6
     y_ratio: float = Field(0.62, ge=0.1, le=0.9, description="vertical position of the title, 0=top")
-    cover_offset_ms: int = 1200  # Reels cover frame: lands while the title is on screen
+    in_video: bool = False  # burn the title into the first seconds (off: keep the hook shot clean)
+    cover: bool = True  # poster cover (best frame + title) uploaded as the Reels cover image
+    cover_offset_ms: int = 1200  # fallback cover frame if no poster cover is used
 
 
 class CaptionSpec(BaseModel):
@@ -103,6 +120,7 @@ class Series(BaseModel):
     series: SeriesMeta
     style: Style
     characters: list[Character] = Field(default_factory=list)
+    cast: CastSpec = CastSpec()
     episodes: list[EpisodeSeed] = Field(default_factory=list)
     shots: ShotSpec = ShotSpec()
     models: Models
@@ -125,11 +143,15 @@ class Series(BaseModel):
         return self
 
     def estimate_reel_cost(self) -> float:
+        """First take: one location plate + n shots + music."""
         n, d = self.shots.count, self.shots.duration_s
         return round(
-            n * self.models.image.estimate() + n * self.models.video.estimate(d) + self.music.cost_per_track,
+            self.models.image.estimate() + n * self.models.video.estimate(d) + self.music.cost_per_track,
             4,
         )
+
+    def estimate_cast_cost(self) -> float:
+        return round(len(self.characters) * self.cast.candidates * self.models.image.estimate(), 4)
 
     def resolve(self, p: Path) -> Path:
         return p if p.is_absolute() else (self.base_dir / p)

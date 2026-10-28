@@ -31,7 +31,7 @@ def probe_duration(path: Path) -> float:
 class AssemblyPlan:
     clips: list[Path]
     durations: list[float]  # seconds used from each clip
-    title_png: Path
+    title_png: Path | None  # None: no title burned into the video (poster cover only)
     title: TitleCard
     music: Path | None
     music_volume_db: float
@@ -48,12 +48,16 @@ def build_command(p: AssemblyPlan) -> list[str]:
     cmd = ["ffmpeg", "-y", "-loglevel", "error"]
     for clip in p.clips:
         cmd += ["-i", str(clip)]
-    cmd += ["-loop", "1", "-t", f"{total}", "-i", str(p.title_png)]
+    next_idx = n
+    title_idx = None
+    if p.title_png:
+        cmd += ["-loop", "1", "-t", f"{total}", "-i", str(p.title_png)]
+        title_idx, next_idx = next_idx, next_idx + 1
     if p.music:
         cmd += ["-i", str(p.music)]
     else:
         cmd += ["-f", "lavfi", "-t", f"{total}", "-i", "anullsrc=r=48000:cl=stereo"]
-    title_idx, audio_idx = n, n + 1
+    audio_idx = next_idx
 
     parts = []
     for i, d in enumerate(p.durations):
@@ -63,14 +67,17 @@ def build_command(p: AssemblyPlan) -> list[str]:
         )
     parts.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vcat]")
 
-    t0 = max(0.0, p.title.show_from)
-    t1 = min(total, p.title.show_until)
-    fade = min(0.35, max(0.05, (t1 - t0) / 4))
-    parts.append(
-        f"[{title_idx}:v]format=rgba,fade=t=in:st={t0}:d={fade}:alpha=1,"
-        f"fade=t=out:st={t1 - fade:.3f}:d={fade}:alpha=1[tc]"
-    )
-    parts.append(f"[vcat][tc]overlay=0:0:enable='between(t,{t0},{t1})',format=yuv420p[vout]")
+    if title_idx is not None:
+        t0 = max(0.0, p.title.show_from)
+        t1 = min(total, p.title.show_until)
+        fade = min(0.35, max(0.05, (t1 - t0) / 4))
+        parts.append(
+            f"[{title_idx}:v]format=rgba,fade=t=in:st={t0}:d={fade}:alpha=1,"
+            f"fade=t=out:st={t1 - fade:.3f}:d={fade}:alpha=1[tc]"
+        )
+        parts.append(f"[vcat][tc]overlay=0:0:enable='between(t,{t0},{t1})',format=yuv420p[vout]")
+    else:
+        parts.append("[vcat]format=yuv420p[vout]")
 
     fade_out = min(1.5, total / 4)
     parts.append(

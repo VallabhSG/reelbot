@@ -20,7 +20,7 @@ mid-render resumes without re-paying for finished shots.
 
 | His bio / credits | Role | Here |
 |---|---|---|
-| Higgsfield, Kling, PixVerse, Dreamina (Seedance/Seedream) | image + video generation | **Higgsfield API** — one async API for Soul, Kling, Seedance, PixVerse, Wan… |
+| Higgsfield, Kling, PixVerse, Dreamina (Seedance/Seedream) | image + video generation | **Higgsfield API**: Grok Imagine 2.0 (cast sheets, plates) + Kling 4.0 Reference-to-Video |
 | CapCut ("Made with Seedance on CapCut") | editing | **ffmpeg** + Pillow title cards (CapCut has no public API) |
 | ElevenLabs ("background music with @elevenlabs") | music | **ElevenLabs Music API** |
 | Pollo, ImagineArt, Flova, YouArt | other sponsored tools | swappable: point `models.*.endpoint` at any Higgsfield model, or add a provider |
@@ -91,21 +91,35 @@ reelbot reject ID
 reelbot regen ID SHOT        re-render one shot (1-based) and re-cut
 reelbot publish-due
 reelbot run                  the worker
+reelbot cast [NAME ...]      draw character-sheet options for Telegram
 ```
 
-## Cost (budget tier, 3 × 5s shots)
+## v2: how a reel is made
 
-| Item | Price used | Per reel |
+1. **Cast (once).** `reelbot cast` (or send `/cast` to the bot) draws 3 character-sheet options per
+   character with Grok Imagine 2.0. Tap ✅ on the one you like. Episodes wait until every character
+   has an approved sheet; the sheet is fed to every shot as a reference image.
+2. **Storyboard.** The planner fills a fixed recipe: 5 beats (hook → escalate → clash → climax →
+   twist), one shot size each (never the same twice in a row, at least one close and one wide), one
+   camera move, one action, one location. Plans that break a rule are sent back with the reason.
+3. **Location plate.** One empty-environment image per episode, shared by all shots.
+4. **Shots.** Kling 4.0 Reference-to-Video, 5 × 3 s, 9:16, 720p. Each prompt is composed by code:
+   size + angle + camera, `@image_N` cast refs + one action, setting + light, style lock, negatives.
+5. **Edit + cover.** ffmpeg cut with music; the title goes on a poster cover (climax frame + title),
+   uploaded as the Reels cover, so the hook shot stays clean.
+
+## Cost (3 reels/week)
+
+| Item | List price | Per reel |
 |---|---|---|
-| Soul keyframe × 3 | $0.0032 / image | ~$0.01 |
-| Kling 2.5 i2v × 15s | $0.042 / s | $0.63 |
+| Location plate (Grok Imagine 2.0) | ~$0.04 / image | $0.04 |
+| Kling 4.0 R2V, 5 × 3 s @ 720p | $0.157 / s ($0.11 on promo) | $2.36 ($1.65) |
 | LLM plan | Groq free tier | $0 |
-| **First take** | | **~$0.64** |
+| **First take** | | **~$2.40** |
 
-Daily posting ≈ $20/month plus regenerations, under the default $40 cap. Seedance 2.5
-(reference-to-video, better character consistency) is a commented preset in the series file; at
-Seedance 2.0's Higgsfield rate (~$0.93/s) a 15s reel is ~$14, so switch when revenue covers it.
-Prices drift: update `cost_*` in the YAML from your Higgsfield dashboard.
+3 reels a week ≈ $31/month at list price, under the $40 cap; a shot redo costs ~$0.47. Cast sheets
+are a one-time ~$0.24. Seedance 2.5 (what the reference account credits) is ~$4.85–6.93 per 15 s at
+720p; switch `models.video` when revenue allows.
 
 ## What the reference account does that you should copy
 

@@ -84,7 +84,7 @@ def test_media_charges_budget_only_on_success(series, db):
             httpx.Response(200, json={"status": "completed", "video": {"url": "https://x/v.mp4"}}),
         ]
     )
-    ctx = {"prompt": "p", "image_url": "https://x/k.png", "duration": 5, "negative_prompt": None}
+    ctx = {"prompt": "p", "image_urls": ["https://x/k.png"], "duration": 5, "aspect_ratio": "9:16"}
     with pytest.raises(HiggsfieldError):
         media.video(ctx, job_id=1)
     assert db.spend_for_job(1) == 0
@@ -96,7 +96,7 @@ def test_media_refuses_call_over_budget(series, db):
     guard = BudgetGuard(db, Budget(monthly_usd=0.01, per_reel_usd=10), "Asia/Kolkata")
     media = HiggsfieldMedia(client(), series.models, guard, series.base_dir)
     with pytest.raises(BudgetExceeded):  # no HTTP mock: proves no request is attempted
-        media.video({"prompt": "p", "image_url": "u", "duration": 5, "negative_prompt": None}, job_id=1)
+        media.video({"prompt": "p", "image_urls": ["u"], "duration": 5, "aspect_ratio": "9:16"}, job_id=1)
 
 
 @respx.mock

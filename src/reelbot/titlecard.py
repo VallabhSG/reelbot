@@ -63,3 +63,22 @@ def render_title_card(title: str, subtitle: str, spec: TitleCard, font_path: Pat
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)
     return out
+
+
+def render_cover(frame: Path, title_png: Path, out: Path) -> Path:
+    """Poster cover for the Reels grid: a 1080x1920 frame with the title card on top, saved as sRGB
+    JPEG (what the Instagram API accepts for cover_url)."""
+    base = Image.open(frame).convert("RGB")
+    if base.size != (W, H):  # cover-crop to 9:16
+        scale = max(W / base.width, H / base.height)
+        base = base.resize((round(base.width * scale), round(base.height * scale)), Image.LANCZOS)
+        left, top = (base.width - W) // 2, (base.height - H) // 2
+        base = base.crop((left, top, left + W, top + H))
+    overlay = Image.open(title_png).convert("RGBA")
+    # darken the lower half slightly so the title reads on any frame
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(shade).rectangle((0, int(H * 0.5), W, H), fill=(0, 0, 0, 70))
+    composed = Image.alpha_composite(Image.alpha_composite(base.convert("RGBA"), shade), overlay)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    composed.convert("RGB").save(out, "JPEG", quality=90, optimize=True)
+    return out

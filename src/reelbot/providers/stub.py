@@ -8,6 +8,7 @@ import json
 import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -47,9 +48,12 @@ class StubMedia:
 
     def video(self, ctx: dict[str, Any], job_id: int | None) -> str:
         self.calls.append(("video", ctx))
-        src = Path(ctx["image_url"].removeprefix("file://"))
+        refs = ctx.get("image_urls") or [ctx["image_url"]]
+        src = Path(unquote(urlparse(refs[-1]).path))  # last ref = the location plate
+        if not src.exists():  # e.g. a remote cast URL in dry-run: draw a frame for it
+            src = Path(unquote(urlparse(self.image({"prompt": ctx["prompt"][:120]}, job_id)).path))
         dur = int(ctx["duration"])
-        out = self.workdir / f"{src.stem}_{dur}s.mp4"
+        out = self.workdir / f"{src.stem}_{hashlib.md5(ctx['prompt'].encode()).hexdigest()[:6]}_{dur}s.mp4"
         frames = dur * 30
         subprocess.run(
             [
@@ -107,20 +111,34 @@ class StubMusic:
 
 
 class StubLLM:
-    """Returns a deterministic, schema-valid plan."""
+    """Returns a deterministic plan that follows the storyboard rules."""
+
+    SIZES = ["WS", "MCU", "MS", "ECU", "EWS", "CU", "MS", "WS"]
+    BEATS = ["hook", "escalate", "clash", "climax", "twist"]
 
     def json_chat(self, system: str, user: str, temperature: float = 0.9) -> dict[str, Any]:
         n_shots = json.loads(user.split("SHOT_COUNT_JSON=")[1].split("\n")[0])
+        cast = [ln[2:].split(":")[0] for ln in system.splitlines() if ln.startswith("- ") and ":" in ln[:30]]
+        cast = [c for c in cast if c and c[0].isupper() and " " not in c][:2]
         return {
             "title": "LAST TRAIN",
             "category": "Metro night driver",
             "emoji": "🚇",
             "logline": "The final train of the night, and one passenger who never gets off.",
             "hook": "Last stop, 1:12 AM.\nShe was still sitting there.",
+            "location": {
+                "name": "night metro platform",
+                "plate_prompt": "an empty underground metro platform at night, wet tiles, cold fluorescent light",
+            },
             "shots": [
                 {
-                    "keyframe_prompt": f"shot {i + 1}: empty metro carriage at night, neon reflections",
-                    "motion_prompt": "slow dolly forward, flickering lights",
+                    "beat": self.BEATS[i] if n_shots == len(self.BEATS) else "hook",
+                    "size": self.SIZES[i % len(self.SIZES)],
+                    "angle": "low angle" if i % 2 else "eye level",
+                    "camera": "slow push-in",
+                    "cast": cast[:1] if i % 2 == 0 else cast[:2],
+                    "action": f"beat {i + 1}: she sprints for the closing doors and slides through",
+                    "light": "cold key light from screen-left, 5600K",
                 }
                 for i in range(n_shots)
             ],

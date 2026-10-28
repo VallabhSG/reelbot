@@ -33,3 +33,7 @@ def test_extract_dotted_path():
     assert extract({"video": {"url": "v"}}, "video.url") == "v"
     with pytest.raises(KeyError):
         extract({"video": {}}, "video.url")
+
+
+def test_empty_lists_are_dropped_from_request_bodies():
+    assert render({"prompt": "{p}", "image_urls": "{refs}"}, {"p": "x", "refs": []}) == {"prompt": "x"}

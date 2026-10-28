@@ -29,6 +29,14 @@ def review_keyboard(job_id: int, n_shots: int, music_regen: bool) -> dict[str, A
     return {"inline_keyboard": rows}
 
 
+def cast_keyboard(name: str, idx: int) -> dict[str, Any]:
+    return {"inline_keyboard": [[{"text": f"✅ Use this {name}", "callback_data": f"c:{name}:{idx}"}]]}
+
+
+def cast_more_keyboard(name: str) -> dict[str, Any]:
+    return {"inline_keyboard": [[{"text": f"🔁 More {name} options", "callback_data": f"cm:{name}"}]]}
+
+
 class Telegram:
     def __init__(self, token: str, chat_id: str, http: httpx.Client | None = None):
         if not token or not chat_id:
@@ -69,6 +77,22 @@ class Telegram:
                 reply_markup=reply_markup,
             )["message_id"]
 
+    def send_photo(self, path: Path, caption: str = "", reply_markup: dict | None = None) -> int:
+        with path.open("rb") as f:
+            return self._call(
+                "sendPhoto",
+                files={
+                    "photo": (
+                        path.name,
+                        f,
+                        "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else "image/png",
+                    )
+                },
+                chat_id=self.chat_id,
+                caption=caption[:1024],
+                reply_markup=reply_markup,
+            )["message_id"]
+
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         """Best effort: on cron hosts a tap is read up to 30 min later, and Telegram rejects answers to
         queries that old ("query is too old"). That must never stop the action itself."""
@@ -106,6 +130,12 @@ class ConsoleNotifier:
     def send_message(self, text: str, reply_markup: dict | None = None, reply_to: int | None = None) -> int:
         self.sent.append(text)
         log.info("[notify] %s", text)
+        self._next += 1
+        return self._next
+
+    def send_photo(self, path: Path, caption: str = "", reply_markup: dict | None = None) -> int:
+        self.sent.append(f"PHOTO {path}\n{caption}")
+        log.info("[photo] %s %s", path, caption)
         self._next += 1
         return self._next
 
