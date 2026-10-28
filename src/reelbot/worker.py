@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -15,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from .budget import BudgetExceeded
 from .db import DB
+from .learn import parse_note
 from .models import JobStatus
 from .pipeline import Pipeline
 from .series import Schedule
@@ -24,6 +26,8 @@ DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 LAST_GEN_KEY = "last_generation_date"
 TG_SEEN_KEY = "telegram_seen"  # recent update ids: a crash between handling and confirming never replays
 TG_SEEN_MAX = 300
+NOTE_RE = re.compile(r"^#\d+\b")  # "#7 the slide made no sense" = a note on job 7
+JOB_REF_RE = re.compile(r"#(\d+)\b")
 
 
 def _describe(upd: dict[str, Any]) -> str:
@@ -117,10 +121,41 @@ class Worker:
     def handle_update(self, upd: dict[str, Any]) -> None:
         if cb := upd.get("callback_query"):
             self._handle_callback(cb)
-        elif (msg := upd.get("message")) and msg.get("reply_to_message"):
+            return
+        msg = upd.get("message") or {}
+        text = (msg.get("text") or "").strip()
+        if NOTE_RE.match(text) or text.lower().startswith("/note"):
+            self._handle_note(msg)
+        elif msg.get("reply_to_message"):
             self._handle_reply(msg)
-        elif (msg := upd.get("message")) and (msg.get("text") or "").strip().lower().startswith("/cast"):
+        elif text.lower().startswith("/cast"):
             self._handle_cast_command(msg)
+        elif text.lower().startswith("/lessons"):
+            self._handle_lessons(msg)
+
+    def _handle_lessons(self, msg: dict[str, Any]) -> None:
+        if self._authorized(msg.get("chat")) and (learner := getattr(self.p, "learner", None)):
+            self.tg.send_message("📒 Lessons the next episodes follow:\n" + learner.lessons_text())
+
+    # ---------------------------------------------------------------- notes -> lessons
+    def _handle_note(self, msg: dict[str, Any]) -> None:
+        if not self._authorized(msg.get("chat")):
+            return
+        job_id, text = parse_note(msg["text"])
+        self._take_note(job_id, text, msg.get("message_id"))
+
+    def _take_note(self, job_id: int | None, text: str, reply_to: int | None) -> None:
+        try:
+            self.p.add_note(job_id, text)
+        except (KeyError, ValueError) as e:
+            self.tg.send_message(f"⚠️ {e}", reply_to=reply_to)
+            return
+        reply = f"📝 Noted{f' for #{job_id}' if job_id else ''}."
+        learner = getattr(self.p, "learner", None)
+        changed = learner.update_lessons() if learner else None
+        if changed and changed[0]:
+            reply += " New lesson(s) for the next episodes:\n" + "\n".join(f"• {t}" for t in changed[0])
+        self.tg.send_message(reply, reply_to=reply_to)
 
     def _handle_cast_command(self, msg: dict[str, Any]) -> None:
         if not self._authorized(msg.get("chat")):
@@ -238,6 +273,10 @@ class Worker:
                 caption = self.p.set_hook(job["id"], msg["text"])
                 self.tg.send_message(f"✏️ Caption for #{job['id']} updated:\n\n{caption}", reply_to=replied)
                 return
+        # a reply to any other message about a job (e.g. "🚀 #7 is live") is a note on that job
+        original = msg["reply_to_message"].get("text") or msg["reply_to_message"].get("caption") or ""
+        if m := JOB_REF_RE.search(original):
+            self._take_note(int(m.group(1)), msg["text"], msg.get("message_id"))
 
     def poll_telegram(self) -> int:
         """Handle every tap/message Telegram still holds, then confirm them.
@@ -271,6 +310,7 @@ class Worker:
         self.maybe_generate()
         self.p.publish_due(datetime.now(UTC))
         self.poll_telegram()
+        self.learn()
 
     def run_once(self) -> str:
         """One pass for cron hosts (GitHub Actions): finish crashed renders, drain Telegram
@@ -290,7 +330,20 @@ class Worker:
             parts.append(f"resumed #{', #'.join(map(str, resumed))}")
         parts.append(f"generate: {self.gen_note or 'nothing'}")
         parts.append(f"published: {len(published)} reel(s)" if published else "publish: nothing due")
+        if learned := self.learn():
+            parts.append(f"learn: {learned}")
         return " · ".join(parts)
+
+    def learn(self) -> str:
+        """Fetch reel numbers, refresh the lessons, send the weekly report. Never fails a run."""
+        learner = getattr(self.p, "learner", None)
+        if learner is None:
+            return ""
+        try:
+            return learner.run(self.now())
+        except Exception as e:
+            log.exception("learning pass failed")
+            return f"failed ({type(e).__name__})"
 
     def run_forever(self) -> None:
         log.info("worker started (tz=%s)", self.tz)

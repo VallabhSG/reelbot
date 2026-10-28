@@ -3,10 +3,13 @@
 reelbot check                 validate config, show cost estimates, check ffmpeg + credentials
 reelbot make [--job ID]       plan + generate one episode now (or resume a failed job) -> review
 reelbot status                recent jobs + month spend
-reelbot approve ID [--now]    approve (posts at schedule.publish_at, or immediately with --now)
-reelbot reject ID
+reelbot approve ID [NOTE…] [--now]  approve (posts at schedule.publish_at, or now with --now)
+reelbot reject ID [NOTE…]     reject; the note (why) teaches the next episodes
+reelbot note ID NOTE…         tell the bot what worked or didn't in an episode (no ID: the series)
+reelbot lessons [--update]    what the bot has learned from your notes + the reels' numbers
+reelbot stats                 fetch Instagram numbers for posted reels now and list them
 reelbot regen ID SHOT         regenerate shot number SHOT (1-based)  [v2 shot reels]
-reelbot retake ID             render the whole take again             [v3 one-take reels]
+reelbot retake ID [NOTE…]     render the whole take again             [v3 one-take reels]
 reelbot bakeoff [MODEL ...]   one episode rendered on several video models, to pick a winner
 reelbot publish-due           publish approved jobs whose slot has passed
 reelbot run                   long-running worker (schedule + Telegram review + publishing)
@@ -29,6 +32,7 @@ from zoneinfo import ZoneInfo
 
 from .config import get_settings
 from .factory import build
+from .learn import parse_note, posted
 from .models import JobStatus
 from .worker import Worker, publish_time_for_approval
 
@@ -127,12 +131,18 @@ def cmd_status(_: argparse.Namespace) -> int:
     app = build(get_settings())
     statuses = list(JobStatus)
     jobs = app.db.jobs_with_status(*statuses)[-15:]
+    views = {
+        r.job_id: f"{int(r.data.get('views', 0)):,} views"
+        + (f", {r.watched:.0%} watched" if r.watched is not None else "")
+        for r in posted(app.db)
+    }
     for j in jobs:
         title = json.loads(j["plan_json"]).get("title", "?")  # raw: old-format plans still list
         cost = app.db.spend_for_job(j["id"])
         print(
             f"#{j['id']:<4} ep{j['episode_no']:<4} {j['status']:<16} ${cost:5.2f}  {title}"
             + (f"  ! {j['error'][:80]}" if j["error"] else "")
+            + (f"  · {views[j['id']]}" if j["id"] in views else "")
         )
     print(f"month spend: ${app.guard.month_spend():.2f} / ${app.series.budget.monthly_usd:.2f}")
     cast = app.pipeline.cast_urls()
@@ -158,7 +168,7 @@ def cmd_approve(a: argparse.Namespace) -> int:
     app = build(get_settings())
     tz = ZoneInfo(app.settings.timezone)
     when = datetime.now(UTC) if a.now else publish_time_for_approval(app.series.schedule, datetime.now(tz))
-    app.pipeline.approve(a.job, when)
+    app.pipeline.approve(a.job, when, note=" ".join(a.note))
     print(f"job {a.job} approved, publishes at {when.astimezone(tz):%Y-%m-%d %H:%M %Z}")
     _tell(app, a.job, f"✅ #{a.job} approved, posting at {when.astimezone(tz):%a %H:%M}")
     if a.now:
@@ -168,9 +178,48 @@ def cmd_approve(a: argparse.Namespace) -> int:
 
 def cmd_reject(a: argparse.Namespace) -> int:
     app = build(get_settings())
-    app.pipeline.reject(a.job)
+    note = " ".join(a.note)
+    app.pipeline.reject(a.job, note=note)
     print(f"job {a.job} rejected")
-    _tell(app, a.job, f"❌ #{a.job} rejected")
+    _tell(app, a.job, f"❌ #{a.job} rejected" + (f": {note}" if note else ""))
+    return 0
+
+
+def cmd_note(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    job_id, text = parse_note(" ".join(a.words))
+    app.pipeline.add_note(job_id, text)
+    changed = app.pipeline.learner.update_lessons()
+    msg = f"📝 Noted{f' for #{job_id}' if job_id else ''}: {text}"
+    if changed and changed[0]:
+        msg += "\nNew lesson(s) for the next episodes:\n" + "\n".join(f"• {t}" for t in changed[0])
+    print(msg)
+    try:
+        app.pipeline.notifier.send_message(msg)
+    except Exception as e:
+        print(f"(couldn't confirm in Telegram: {e})")
+    return 0
+
+
+def cmd_lessons(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    if a.update:
+        app.pipeline.learner.update_lessons(force=True)
+    print(app.pipeline.learner.lessons_text())
+    return 0
+
+
+def cmd_stats(_: argparse.Namespace) -> int:
+    app = build(get_settings())
+    n = app.pipeline.learner.refresh_metrics()
+    reels = posted(app.db)
+    print(f"fetched {n} reel(s) now; {len(reels)} with numbers:")
+    for r in reels:
+        print("  " + r.line())
+    if not reels:
+        print(
+            "  none yet (posted reels need the instagram_business_manage_insights permission, and up to 48h)"
+        )
     return 0
 
 
@@ -205,7 +254,7 @@ def cmd_regen(a: argparse.Namespace) -> int:
 
 
 def cmd_retake(a: argparse.Namespace) -> int:
-    out = build(get_settings()).pipeline.retake(a.job)
+    out = build(get_settings()).pipeline.retake(a.job, note=" ".join(a.note))
     print(f"job {a.job} new take: {out}")
     return 0
 
@@ -276,11 +325,20 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status").set_defaults(fn=cmd_status)
     p = sub.add_parser("approve")
     p.add_argument("job", type=int)
+    p.add_argument("note", nargs="*", help="optional: what worked")
     p.add_argument("--now", action="store_true")
     p.set_defaults(fn=cmd_approve)
     p = sub.add_parser("reject")
     p.add_argument("job", type=int)
+    p.add_argument("note", nargs="*", help="optional: why (it teaches the next episodes)")
     p.set_defaults(fn=cmd_reject)
+    p = sub.add_parser("note")
+    p.add_argument("words", nargs="+", help="[ID] what worked or didn't, e.g. 7 the slide made no sense")
+    p.set_defaults(fn=cmd_note)
+    p = sub.add_parser("lessons")
+    p.add_argument("--update", action="store_true", help="rewrite them now from all the evidence")
+    p.set_defaults(fn=cmd_lessons)
+    sub.add_parser("stats").set_defaults(fn=cmd_stats)
     p = sub.add_parser("regen")
     p.add_argument("job", type=int)
     p.add_argument("shot", type=int)
@@ -297,6 +355,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_cast)
     p = sub.add_parser("retake")
     p.add_argument("job", type=int)
+    p.add_argument("note", nargs="*", help="optional: what was wrong with the take")
     p.set_defaults(fn=cmd_retake)
     p = sub.add_parser("bakeoff")
     p.add_argument("models", nargs="*", help="keys from models.takes (default: take.bakeoff)")

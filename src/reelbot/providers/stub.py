@@ -161,6 +161,12 @@ class StubLLM:
     def json_chat(self, system: str, user: str, temperature: float = 0.9) -> dict[str, Any]:
         from ..storyboard import default_beats
 
+        if "NOTEBOOK" in system:  # the lessons keeper: one lesson per owner note, in order
+            notes = [ln.split(': "', 1)[1].rstrip('"') for ln in user.splitlines() if ': "' in ln]
+            return {
+                "lessons": [{"text": f"Fix: {n}", "evidence": "owner note"} for n in notes][:10]
+                or [{"text": "Open on motion in the first second.", "evidence": "stub"}]
+            }
         if "FIRST-TIME VIEWER" in system:  # the story critic
             return {
                 "summary": "she makes the train, the cat was faster",

@@ -6,10 +6,14 @@ Flow (developers.facebook.com/docs/instagram-platform/content-publishing):
   3. POST /{ig-user-id}/media_publish creation_id=<container id>                   -> media id
 Requires a professional (Business/Creator) account and instagram_business_content_publish.
 Accounts are limited to 100 API-published posts per rolling 24h.
+
+Insights (what the series learns from): GET /{media-id}/insights?metric=... needs
+instagram_business_manage_insights. Lifetime values only; they can lag up to 48h.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from datetime import UTC, datetime, timedelta
@@ -25,10 +29,33 @@ log = logging.getLogger(__name__)
 
 TOKEN_KEY = "ig_access_token"
 TOKEN_REFRESHED_KEY = "ig_token_refreshed_at"
+TOKEN_ENV_KEY = "ig_env_token_sig"  # which ENV_FILE token the stored (refreshed) copy came from
+
+# Reels metrics on the Instagram API with Instagram Login (plays/impressions are deprecated).
+# ig_reels_avg_watch_time is in milliseconds; reels_skip_rate is a percentage.
+REEL_METRICS = (
+    "views",
+    "reach",
+    "likes",
+    "comments",
+    "shares",
+    "saved",
+    "ig_reels_avg_watch_time",
+    "reels_skip_rate",
+)
 
 
 class InstagramError(RuntimeError):
     pass
+
+
+class InsightsUnavailable(InstagramError):
+    """The token can't read insights (missing instagram_business_manage_insights)."""
+
+
+def _is_permission_error(text: str) -> bool:
+    t = text.lower()
+    return any(k in t for k in ('"code":10,', '"code":10}', '"code":200', "(#10)", "(#200)", "permission"))
 
 
 class InstagramPublisher:
@@ -55,9 +82,22 @@ class InstagramPublisher:
         self.poll_timeout = poll_timeout
 
     # ---- token handling: DB copy (refreshed) wins over the env bootstrap token ----
+    def _env_sig(self) -> str:
+        return hashlib.sha256(self._env_token.encode()).hexdigest()[:16]
+
     @property
     def token(self) -> str:
-        t = self.db.kv_get(TOKEN_KEY) or self._env_token
+        stored = self.db.kv_get(TOKEN_KEY)
+        if stored and self._env_token:
+            recorded = self.db.kv_get(TOKEN_ENV_KEY)
+            if recorded is None:  # copy made before we tracked this: it came from the current token
+                self.db.kv_set(TOKEN_ENV_KEY, self._env_sig())
+            elif recorded != self._env_sig():
+                # a NEW token in ENV_FILE (e.g. with more permissions) replaces the refreshed old one
+                self.db.kv_set(TOKEN_KEY, "")
+                self.db.kv_set(TOKEN_ENV_KEY, self._env_sig())
+                stored = ""
+        t = stored or self._env_token
         if not t:
             raise ValueError("IG_ACCESS_TOKEN is required")
         return t
@@ -84,6 +124,8 @@ class InstagramPublisher:
             log.warning("token refresh skipped: %s %s", r.status_code, r.text[:200])
             return False
         self.db.kv_set(TOKEN_KEY, r.json()["access_token"])
+        if self._env_token:
+            self.db.kv_set(TOKEN_ENV_KEY, self._env_sig())
         self.db.kv_set(TOKEN_REFRESHED_KEY, datetime.now(UTC).isoformat(timespec="seconds"))
         return True
 
@@ -161,6 +203,36 @@ class InstagramPublisher:
         except Exception:  # cosmetic only
             return None
 
+    def insights(self, media_id: str) -> dict[str, float]:
+        """Lifetime metrics of one reel. Metrics Instagram doesn't have yet are simply missing.
+        Raises InsightsUnavailable when the token lacks the insights permission."""
+        try:
+            return _parse_insights(self._req("GET", f"{media_id}/insights", metric=",".join(REEL_METRICS)))
+        except InstagramError as e:
+            if _is_permission_error(str(e)):
+                raise InsightsUnavailable(str(e)) from e
+            log.info("insights batch for %s refused (%s); asking metric by metric", media_id, e)
+        out: dict[str, float] = {}
+        for m in REEL_METRICS:  # one unsupported metric fails the whole batch, so isolate them
+            try:
+                out.update(_parse_insights(self._req("GET", f"{media_id}/insights", metric=m)))
+            except InstagramError as e:
+                if _is_permission_error(str(e)):
+                    raise InsightsUnavailable(str(e)) from e
+                log.info("insight %s unavailable for %s: %s", m, media_id, str(e)[:120])
+        return out
+
+
+def _parse_insights(body: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for item in body.get("data") or []:
+        name = item.get("name")
+        values = item.get("values") or []
+        value = values[0].get("value") if values else (item.get("total_value") or {}).get("value")
+        if name and isinstance(value, int | float):
+            out[name] = float(value)
+    return out
+
 
 class DryRunPublisher:
     def __init__(self) -> None:
@@ -179,3 +251,18 @@ class DryRunPublisher:
 
     def permalink(self, media_id: str) -> str | None:
         return None
+
+    def insights(self, media_id: str) -> dict[str, float]:
+        """Deterministic fake numbers so a dry run exercises the learning loop."""
+        h = hashlib.sha256(media_id.encode()).digest()
+        views = 500 + h[0] * 20
+        return {
+            "views": float(views),
+            "reach": float(views * 0.8),
+            "likes": float(h[1] % 120),
+            "comments": float(h[2] % 15),
+            "shares": float(h[3] % 30),
+            "saved": float(h[4] % 25),
+            "ig_reels_avg_watch_time": float(4000 + h[5] * 40),
+            "reels_skip_rate": float(30 + h[6] % 40),
+        }

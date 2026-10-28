@@ -1,4 +1,4 @@
-"""SQLite state: jobs, per-shot assets, spend ledger, key-value store."""
+"""SQLite state: jobs, per-shot assets, spend ledger, review feedback, Instagram metrics, key-value store."""
 
 from __future__ import annotations
 
@@ -46,6 +46,19 @@ CREATE TABLE IF NOT EXISTS spend (
   created_at  TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS feedback (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id     INTEGER,
+  kind       TEXT NOT NULL,              -- note | approved | rejected | retake
+  text       TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS metrics (
+  job_id     INTEGER PRIMARY KEY,
+  media_id   TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  data_json  TEXT NOT NULL               -- latest lifetime insights, e.g. {"views": 2140, ...}
+);
 """
 
 
@@ -165,6 +178,44 @@ class DB:
                 "SELECT COALESCE(SUM(amount_usd), 0) FROM spend WHERE job_id=?", (job_id,)
             ).fetchone()
             return float(row[0])
+
+    # ---- feedback (your verdicts + notes) and Instagram metrics: what the series learns from ----
+    def add_feedback(self, job_id: int | None, kind: str, text: str = "") -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO feedback (job_id, kind, text, created_at) VALUES (?,?,?,?)",
+                (job_id, kind, text.strip(), _now()),
+            )
+
+    def feedback(self, limit: int = 40) -> list[dict[str, Any]]:
+        """Newest first."""
+        with self._conn() as c:
+            rows = c.execute("SELECT * FROM feedback ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def save_metrics(self, job_id: int, media_id: str, data: dict[str, float]) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO metrics (job_id, media_id, fetched_at, data_json) VALUES (?,?,?,?) "
+                "ON CONFLICT(job_id) DO UPDATE SET media_id=excluded.media_id, "
+                "fetched_at=excluded.fetched_at, data_json=excluded.data_json",
+                (job_id, media_id, _now(), json.dumps(data)),
+            )
+
+    def metrics(self) -> dict[int, dict[str, Any]]:
+        """job id -> {"fetched_at": iso, "data": {...}}"""
+        with self._conn() as c:
+            rows = c.execute("SELECT job_id, fetched_at, data_json FROM metrics").fetchall()
+        return {r[0]: {"fetched_at": r[1], "data": json.loads(r[2])} for r in rows}
+
+    def last_evidence_at(self) -> str:
+        """When the newest feedback or metric arrived ('' if none): lessons older than this are stale."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT MAX(t) FROM (SELECT MAX(created_at) AS t FROM feedback "
+                "UNION ALL SELECT MAX(fetched_at) FROM metrics)"
+            ).fetchone()
+            return row[0] or ""
 
     # ---- kv ----
     def kv_get(self, key: str) -> str | None:

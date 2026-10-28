@@ -6,6 +6,7 @@ v3 episode:   continuous storyboard -> location plate -> opening frame (cast she
               together) -> ONE generation of the whole reel with the cuts inside it, sound effects
               on -> music -> mix (music-led, dip before the climax) -> poster cover
 then:         Telegram review -> Instagram (with the poster as the Reels cover)
+learning:     your verdicts + notes and each reel's Instagram numbers -> lessons -> next storyboard
 bake-off:     the same v3 storyboard, opening frame and music rendered on several video models, so
               the only difference you judge is the model
 """
@@ -31,6 +32,7 @@ from .assemble import (
 )
 from .budget import BudgetExceeded, BudgetGuard
 from .db import DB
+from .learn import Learner, planner_guidance
 from .models import EpisodePlan, JobStatus
 from .planner import Planner
 from .providers import MediaProvider
@@ -82,6 +84,7 @@ class Pipeline:
         self.notifier = notifier
         self.storage = storage
         self.publisher = publisher
+        self.learner = Learner(db, series, planner.llm, publisher, notifier)
 
     # ================================================================== cast
     def cast_urls(self) -> dict[str, str]:
@@ -160,7 +163,7 @@ class Pipeline:
         n = self.db.next_episode_no()
         if n > self.s.series.total_episodes:
             raise RuntimeError(f"series complete ({self.s.series.total_episodes} episodes)")
-        plan = self.planner.plan(n, self.db.past_titles())
+        plan = self.planner.plan(n, self.db.past_titles(), guidance=planner_guidance(self.db))
         job_id = self.db.create_job(n, plan)
         model = self.active_take_model() if self.s.take.enabled else None
         if model:
@@ -563,20 +566,34 @@ class Pipeline:
             raise ValueError(f"job {job_id} is {job['status']}, expected one of {[a.value for a in allowed]}")
         return job
 
-    def approve(self, job_id: int, publish_after: datetime | None = None) -> None:
+    def approve(self, job_id: int, publish_after: datetime | None = None, note: str = "") -> None:
         self._require(job_id, JobStatus.AWAITING_REVIEW)
         when = (publish_after or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
         self.db.update_job(job_id, status=JobStatus.APPROVED, publish_after=when)
+        self.db.add_feedback(job_id, "approved", note)
 
-    def reject(self, job_id: int) -> None:
-        self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED, JobStatus.FAILED)
+    def reject(self, job_id: int, note: str = "") -> None:
+        job = self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED, JobStatus.FAILED)
         self.db.update_job(job_id, status=JobStatus.REJECTED)
+        if job["status"] != JobStatus.FAILED or note:  # a dead render says nothing about the story
+            self.db.add_feedback(job_id, "rejected", note)
 
-    def retake(self, job_id: int) -> Path:
+    def add_note(self, job_id: int | None, text: str) -> None:
+        """Your words about an episode (or the series, with no job): the strongest evidence the
+        lessons are built from."""
+        text = text.strip()
+        if not text:
+            raise ValueError("the note is empty")
+        if job_id is not None and not self.db.get_job(job_id):
+            raise KeyError(f"job {job_id} not found")
+        self.db.add_feedback(job_id, "note", text)
+
+    def retake(self, job_id: int, note: str = "") -> Path:
         """v3: render the whole take again (same storyboard, opening frame and music)."""
         self._require(job_id, JobStatus.AWAITING_REVIEW)
         if not self.s.take.enabled:
             raise ValueError("retake is for one-take reels; use the shot buttons")
+        self.db.add_feedback(job_id, "retake", note)
         plan = self.db.plan(job_id)
         self.db.update_job(job_id, status=JobStatus.GENERATING)
         try:
@@ -600,7 +617,7 @@ class Pipeline:
         if unknown:
             raise ValueError(f"unknown model(s) {unknown}; choose from {sorted(self.s.models.takes)}")
         n = self.db.next_episode_no()
-        plan = self.planner.plan(n, self.db.past_titles())
+        plan = self.planner.plan(n, self.db.past_titles(), guidance=planner_guidance(self.db))
         ids = []
         for name in names:
             jid = self.db.create_job(n, plan)

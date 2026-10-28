@@ -208,7 +208,9 @@ class Planner:
             beats=" -> ".join(BEATS[: s.shots.count]) if s.shots.count == len(BEATS) else "free",
         )
 
-    def user_prompt(self, episode_no: int, past_titles: list[str], feedback: str = "") -> str:
+    def user_prompt(
+        self, episode_no: int, past_titles: list[str], feedback: str = "", guidance: str = ""
+    ) -> str:
         s = self.series
         seed = s.episodes[episode_no - 1] if episode_no - 1 < len(s.episodes) else None
         lines = [
@@ -242,6 +244,8 @@ class Planner:
                 "- Homage: pick the ONE famous movie moment below that fits this gag best and stage the "
                 f"climax like it. {film_rule} Options: " + "; ".join(s.homages)
             )
+        if guidance:  # lessons from earlier episodes (learn.planner_guidance)
+            lines.append(guidance)
         if past_titles:
             lines.append("Already used (do not repeat titles or premises): " + "; ".join(past_titles))
         if feedback:
@@ -271,12 +275,12 @@ class Planner:
             "Make cause -> winning move -> payoff literal and visible with the sound off"
         )
 
-    def plan(self, episode_no: int, past_titles: list[str]) -> EpisodePlan:
+    def plan(self, episode_no: int, past_titles: list[str], guidance: str = "") -> EpisodePlan:
         feedback = ""
         best: tuple[int, EpisodePlan] | None = None
         for attempt in range(1, self.max_attempts + 1):
             raw = self.llm.json_chat(
-                self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback)
+                self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback, guidance)
             )
             try:
                 plan = EpisodePlan.model_validate(raw)

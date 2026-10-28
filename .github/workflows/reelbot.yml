@@ -11,10 +11,10 @@ on:
       command:
         description: "reelbot command"
         type: choice
-        options: [tick, bakeoff, make, approve, reject, retake, cast, pick, regen, status, smoke, check]
+        options: [tick, make, approve, reject, note, lessons, stats, retake, bakeoff, cast, pick, regen, status, smoke, check]
         default: tick
       args:
-        description: "arguments, e.g. bakeoff: kling3 seedance2 seedance25 · pick: Juno 3 Mochi 1 · approve: 2 --now · reject: 1 · retake: 2"
+        description: "arguments, e.g. approve: 7 · reject: 7 the payoff made no sense · note: 7 opening too static · lessons: --update · approve: 2 --now · pick: Juno 3 Mochi 1"
         type: string
         required: false
         default: ""

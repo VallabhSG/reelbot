@@ -57,8 +57,10 @@ pytest
    `https://api.telegram.org/bot<token>/getUpdates`. Only that chat can approve.
 7. **Instagram** — switch the account to Professional (Creator). In a Meta developer app add
    *Instagram API with Instagram Login*, add the account as a tester, generate a token with
-   `instagram_business_basic` + `instagram_business_content_publish`, exchange it for a long-lived
-   token. Put it and the IG user id in `.env`; the worker refreshes it weekly.
+   `instagram_business_basic` + `instagram_business_content_publish` +
+   `instagram_business_manage_insights` (the last one lets the bot learn from views and watch time),
+   exchange it for a long-lived token. Put it and the IG user id in `.env`; the worker refreshes it
+   weekly. A new token pasted into `.env` later replaces the refreshed copy automatically.
 8. `DRY_RUN=false`, `reelbot check` until all green, `reelbot make` once by hand, then deploy.
 
 ## Deploy
@@ -92,14 +94,17 @@ process: schedule, Telegram long polling, publishing. No inbound ports.
 reelbot check                validate config, cost estimate, credentials
 reelbot make [--job ID]      plan + render one now (or resume a failed job)
 reelbot status               recent jobs and month spend
-reelbot approve ID [--now]   approve; posts at schedule.publish_at, or now
-reelbot reject ID
+reelbot approve ID [NOTE…] [--now]  approve; posts at schedule.publish_at, or now
+reelbot reject ID [NOTE…]    reject; say why and the next episodes learn from it
+reelbot note ID NOTE…        what worked / didn't in an episode (no ID: about the series)
+reelbot lessons [--update]   what the bot has learned so far
+reelbot stats                Instagram numbers of the posted reels
 reelbot regen ID SHOT        re-render one shot (1-based) and re-cut
 reelbot publish-due
 reelbot run                  the worker
 reelbot cast [NAME ...]      draw character-sheet options for Telegram
 reelbot bakeoff [MODEL ...]  one episode on several video models; tap 🏆 on the best
-reelbot retake ID            re-render a one-take reel
+reelbot retake ID [NOTE…]    re-render a one-take reel
 reelbot pick NAME N [...]    lock in option N without Telegram, e.g. pick Juno 3 Mochi 1
 ```
 
@@ -129,6 +134,22 @@ and audio analysis of their reels, dyyhoang's published Seedance prompts, his Ai
 ones you type in the args box: `kling3 seedance2 seedance25`). Storyboard, plate, opening frame and
 music are shared, so the only difference is the model. Tap 🏆 on the best one: it becomes the model
 for every reel and the others are rejected. 🔁 Retake re-renders one reel's take.
+
+## How it gets better over time
+
+Every reel teaches the next one:
+
+- **Your reviews.** Approve / reject / retake are recorded. Say why and it counts much more:
+  Actions → `reject` with args `7 the payoff made no sense`, or `note` with `7 opening too static`.
+  In Telegram: send `#7 opening too static`, or reply to any message about #7 (replying to the
+  review video itself still edits its caption). `/note …` without a number is about the series.
+- **Viewers.** Once a day for two weeks after posting, the bot reads each reel's Instagram numbers:
+  views, how much of the reel people watch on average, skip rate, shares, saves.
+- **Lessons.** An LLM keeps a notebook of at most 10 concrete lessons drawn from that evidence (your
+  notes outrank the numbers; numbers from fewer than 3 reels are only an early signal). Every new
+  storyboard is written with the lessons plus the best- and worst-watched episodes so far.
+  See them with `lessons` or `/lessons`; a note that changes them is answered with the new lesson.
+- **Weekly report** (Sunday evening, Telegram): views, % watched vs last week, best reel, lessons.
 
 ## v2: how a reel is made
 
