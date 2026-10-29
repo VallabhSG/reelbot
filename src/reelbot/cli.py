@@ -16,6 +16,7 @@ reelbot bakeoff [MODEL ...]   one episode rendered on several video models, to p
 reelbot publish-due           publish approved jobs whose slot has passed
 reelbot run                   long-running worker (schedule + Telegram review + publishing)
 reelbot tick                  one worker pass, for cron hosts (GitHub Actions)
+reelbot webhook [URL|off]     instant buttons: point Telegram at the Cloudflare relay (or back to polling)
 reelbot state pull|push       sync DB + in-flight renders with the private state bucket
 reelbot smoke                 verify every live service (1 test image, no posting)
 reelbot cast [NAME ...]       draw character-sheet options and send them to Telegram to pick
@@ -315,15 +316,51 @@ def cmd_publish_due(_: argparse.Namespace) -> int:
     return 0
 
 
+def _inbox(app):
+    """Webhook mode (instant buttons): read taps the relay stored in the state bucket."""
+    s = app.settings
+    if s.dry_run or not (s.telegram_webhook_secret and s.s3_state_bucket):
+        return None
+    from .inbox import R2Inbox
+
+    return R2Inbox.from_settings(s)
+
+
 def cmd_run(_: argparse.Namespace) -> int:
     app = build(get_settings())
-    Worker(app.pipeline, app.db, app.settings.timezone).run_forever()
+    Worker(app.pipeline, app.db, app.settings.timezone, inbox=_inbox(app)).run_forever()
     return 0
 
 
 def cmd_tick(_: argparse.Namespace) -> int:
     app = build(get_settings())
-    print("tick: " + Worker(app.pipeline, app.db, app.settings.timezone, poll_timeout=0).run_once())
+    worker = Worker(app.pipeline, app.db, app.settings.timezone, poll_timeout=0, inbox=_inbox(app))
+    print("tick: " + worker.run_once())
+    return 0
+
+
+def cmd_webhook(a: argparse.Namespace) -> int:
+    """webhook URL: send taps to the relay (instant buttons) · webhook off: back to polling ·
+    webhook (no args): show what Telegram has."""
+    s = get_settings()
+    from .telegram import Telegram
+
+    tg = Telegram(s.telegram_bot_token, s.telegram_chat_id)
+    if a.url == "off":
+        tg.delete_webhook()
+        print("webhook removed: taps are polled again (remove TELEGRAM_WEBHOOK_SECRET from ENV_FILE too)")
+    elif a.url:
+        if not s.telegram_webhook_secret:
+            raise SystemExit("set TELEGRAM_WEBHOOK_SECRET in ENV_FILE first (the same value as the relay's)")
+        if not a.url.startswith("https://"):
+            raise SystemExit("the relay URL must start with https://")
+        tg.set_webhook(a.url, s.telegram_webhook_secret)
+        print(f"webhook set: taps go to {a.url}")
+    info = tg.webhook_info()
+    print(
+        f"Telegram: url={info.get('url') or '(none, polling)'} pending={info.get('pending_update_count', 0)}"
+        + (f" last_error={info.get('last_error_message')}" if info.get("last_error_message") else "")
+    )
     return 0
 
 
@@ -388,6 +425,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("publish-due").set_defaults(fn=cmd_publish_due)
     sub.add_parser("run").set_defaults(fn=cmd_run)
     sub.add_parser("tick").set_defaults(fn=cmd_tick)
+    p = sub.add_parser("webhook")
+    p.add_argument("url", nargs="?", default="", help="the relay's https URL, or 'off'")
+    p.set_defaults(fn=cmd_webhook)
     p = sub.add_parser("state")
     p.add_argument("action", choices=["pull", "push"])
     p.set_defaults(fn=cmd_state)

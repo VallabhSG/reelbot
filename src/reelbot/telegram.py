@@ -128,6 +128,21 @@ class Telegram:
         except TelegramError as e:  # already edited / too old: harmless
             log.debug("clear_keyboard: %s", e)
 
+    def set_webhook(self, url: str, secret: str) -> None:
+        self._call(
+            "setWebhook",
+            url=url,
+            secret_token=secret,
+            allowed_updates=["message", "callback_query"],
+            drop_pending_updates=False,
+        )
+
+    def delete_webhook(self) -> None:
+        self._call("deleteWebhook", drop_pending_updates=False)
+
+    def webhook_info(self) -> dict[str, Any]:
+        return self._call("getWebhookInfo")
+
     def get_updates(self, offset: int | None, timeout: int = 50, limit: int = 100) -> list[dict[str, Any]]:
         return self._call(
             "getUpdates",

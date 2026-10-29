@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # --- Telegram review bot ---
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""  # only this chat may approve/reject
+    # Webhook mode (instant taps): the secret the Cloudflare relay checks. Set = read taps from the
+    # state bucket's inbox/ instead of polling Telegram. See README "Instant buttons".
+    telegram_webhook_secret: str = ""
 
     # --- Instagram (Instagram API with Instagram Login) ---
     ig_user_id: str = ""

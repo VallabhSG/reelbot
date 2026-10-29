@@ -60,9 +60,10 @@ def generation_due(schedule: Schedule, now_local: datetime, last_date: str | Non
 
 
 class Worker:
-    def __init__(self, pipeline: Pipeline, db: DB, tz: str, poll_timeout: int = 30):
+    def __init__(self, pipeline: Pipeline, db: DB, tz: str, poll_timeout: int = 30, inbox: Any = None):
         self.p = pipeline
         self.db = db
+        self.inbox = inbox  # webhook mode: taps relayed into the state bucket (see inbox.py)
         self.tz = ZoneInfo(tz)
         self.poll_timeout = poll_timeout
         self.tg = pipeline.notifier
@@ -288,8 +289,15 @@ class Worker:
 
         No stored offset: we ask for everything unconfirmed, skip ids we've already handled, and only
         confirm after handling. A stale or wrong offset can't silently swallow taps this way, and a
-        crash mid-batch replays nothing (handled ids are remembered first)."""
-        updates = self.tg.get_updates(None, timeout=self.poll_timeout)
+        crash mid-batch replays nothing (handled ids are remembered first).
+        In webhook mode the updates come from the relay's inbox instead (same dedupe)."""
+        if self.inbox is not None:
+            items = self.inbox.pending()
+            updates = [u for _, u in items]
+            keys = {u["update_id"]: k for k, u in items}
+        else:
+            updates = self.tg.get_updates(None, timeout=self.poll_timeout)
+            keys = {}
         log.info("telegram: %d pending update(s)", len(updates))
         seen: list[int] = json.loads(self.db.kv_get(TG_SEEN_KEY) or "[]")
         handled = 0
@@ -297,6 +305,8 @@ class Worker:
             uid = upd["update_id"]
             if uid in seen:
                 log.info("telegram update %s already handled; confirming only", uid)
+                if uid in keys:
+                    self.inbox.done(keys[uid])
                 continue
             seen = [*seen, uid][-TG_SEEN_MAX:]
             self.db.kv_set(TG_SEEN_KEY, json.dumps(seen))
@@ -306,7 +316,9 @@ class Worker:
                 handled += 1
             except Exception:  # one bad update must never stall the run (or the ones after it)
                 log.exception("telegram update %s failed", uid)
-        if updates:  # confirm: Telegram drops everything below this offset
+            if uid in keys:
+                self.inbox.done(keys[uid])
+        if updates and self.inbox is None:  # confirm: Telegram drops everything below this offset
             self.tg.get_updates(max(u["update_id"] for u in updates) + 1, timeout=0, limit=1)
         return handled
 
@@ -364,5 +376,5 @@ class Worker:
                 log.exception("tick failed; retrying in %ss", backoff)
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 300)
-            if not hasattr(self.tg, "base"):  # console notifier has no long poll; don't spin
+            if self.inbox is not None or not hasattr(self.tg, "base"):  # no long poll here: don't spin
                 time.sleep(20)

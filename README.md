@@ -63,6 +63,26 @@ pytest
    weekly. A new token pasted into `.env` later replaces the refreshed copy automatically.
 8. `DRY_RUN=false`, `reelbot check` until all green, `reelbot make` once by hand, then deploy.
 
+### Instant buttons (optional, free)
+
+On GitHub Actions the bot only reads Telegram when a scheduled run starts (every 30 min). For
+taps that act right away, a tiny Cloudflare Worker (`relay/telegram-relay.js`) receives them from
+Telegram, shows "On it…" on the button, stores the tap in the private state bucket and starts a run
+(about a minute to act). Taps wait safely in the bucket, so nothing is lost if a run is delayed.
+
+1. **New bot token:** @BotFather → `/revoke` → your bot → copy the new token (this also cuts off any
+   old copy of the bot still polling somewhere). In ENV_FILE set `TELEGRAM_BOT_TOKEN` to it and add
+   `TELEGRAM_WEBHOOK_SECRET=` a long random string you make up (letters, digits, `_` or `-`).
+2. **GitHub token for the relay:** github.com/settings/personal-access-tokens/new → only the reelbot
+   repo → Permissions → **Actions: Read and write** → generate, copy.
+3. **The Worker:** dash.cloudflare.com → Workers & Pages → Create → Worker (Hello World) → name
+   `reelbot-relay` → Deploy → *Edit code* → paste `relay/telegram-relay.js` → Deploy. Then Settings:
+   - Bindings → Add → R2 bucket → variable `INBOX` → your **state** bucket.
+   - Variables and Secrets: `CHAT_ID` (text), `REPO` (text, `owner/reelbot`), and as secrets
+     `BOT_TOKEN`, `WEBHOOK_SECRET` (same string as in ENV_FILE), `GITHUB_TOKEN`.
+4. Actions → `webhook`, args = the Worker's URL (`https://reelbot-relay.<you>.workers.dev`).
+   `reelbot webhook off` goes back to polling (and remove the secret from ENV_FILE).
+
 ### YouTube Shorts (optional, free)
 
 Every reel can also go up as a YouTube Short right after Instagram (same file; a vertical video up
