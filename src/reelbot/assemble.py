@@ -2,11 +2,13 @@
 
 v2: normalise shots to 1080x1920@30, concat, optional title overlay, music with fades + loudnorm.
 v3: frame the single take for Reels, mix music over the model's own sound effects, dip the music
-    before the climax, master to -14 LUFS."""
+    before the climax, an anime impact frame on the climax cut, master to -14 LUFS."""
 
 from __future__ import annotations
 
 import json
+import math
+import random
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -171,6 +173,37 @@ class TakeAssembly:
     speech: list[tuple[float, float]] = field(default_factory=list)
     subtitles: list[tuple[Path, float, float]] = field(default_factory=list)
     flashes: list[float] = field(default_factory=list)  # 2-frame white flash frames (on the big cut)
+    # anime "impact frames" (start, end): the picture goes high-contrast black & white under radial
+    # speed lines for a few frames, the way the top reels hit their climax
+    impacts: list[tuple[float, float]] = field(default_factory=list)
+    speed_lines: Path | None = None
+
+
+IMPACT_FRAMES = 6  # ~0.2 s at 30 fps
+
+
+def render_speed_lines(out: Path, seed: int = 7) -> Path:
+    """Radial manga speed lines on a transparent frame, with a clear centre for the action."""
+    from PIL import Image, ImageDraw
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    rnd = random.Random(seed)
+    cx, cy, far = W / 2, H * 0.45, math.hypot(W, H)
+    for _ in range(150):
+        a, w = rnd.uniform(0, 2 * math.pi), rnd.uniform(0.004, 0.018)
+        r0 = rnd.uniform(0.35, 0.56) * W
+        d.polygon(
+            [
+                (cx + math.cos(a) * r0, cy + math.sin(a) * r0),
+                (cx + math.cos(a - w) * far, cy + math.sin(a - w) * far),
+                (cx + math.cos(a + w) * far, cy + math.sin(a + w) * far),
+            ],
+            fill=(255, 255, 255, rnd.randint(200, 255)),
+        )
+    img.save(out)
+    return out
 
 
 SPEECH_GAIN_DB = 2.0  # spoken lines sit this far above unity in the mix
@@ -190,19 +223,26 @@ def build_take_command(p: TakeAssembly, sfx: bool) -> list[str]:
         cmd += ["-f", "lavfi", "-t", f"{total}", "-i", "anullsrc=r=48000:cl=stereo"]
     for png, _, _ in p.subtitles:
         cmd += ["-loop", "1", "-t", f"{total}", "-i", str(png)]
+    impacts = p.impacts if p.speed_lines else []
+    if impacts:
+        cmd += ["-loop", "1", "-t", f"{total}", "-i", str(p.speed_lines)]
     base = (
         f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},setsar=1,"
         f"trim=duration={total},setpts=PTS-STARTPTS"
     )
     for t0 in p.flashes:  # "flash frames": two white frames right on the cut
         base += f",drawbox=c=white@0.9:t=fill:enable='{_between(t0, t0 + 2 / FPS)}'"
-    if not p.subtitles:
-        parts = [base + ",format=yuv420p[vout]"]
+    for a, b in impacts:  # impact frame: hard black & white under the speed lines
+        on = _between(a, b)
+        base += f",hue=s=0:enable='{on}',eq=contrast=2.2:brightness=-0.15:enable='{on}'"
+    if impacts:  # the speed lines are the last input, after the subtitle images
+        on = "+".join(_between(a, b) for a, b in impacts)
+        parts = [base + "[vb]", f"[vb][{len(p.subtitles) + 2}:v]overlay=0:0:enable='{on}'[v0]"]
     else:
         parts = [base + "[v0]"]
-        for k, (_, a, b) in enumerate(p.subtitles):
-            parts.append(f"[v{k}][{k + 2}:v]overlay=0:0:enable='{_between(a, b)}'[v{k + 1}]")
-        parts.append(f"[v{len(p.subtitles)}]format=yuv420p[vout]")
+    for k, (_, a, b) in enumerate(p.subtitles):
+        parts.append(f"[v{k}][{k + 2}:v]overlay=0:0:enable='{_between(a, b)}'[v{k + 1}]")
+    parts.append(f"[v{len(p.subtitles)}]format=yuv420p[vout]")
     fade_out = min(1.2, total / 5)
     music = (
         f"[1:a]atrim=0:{total},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,"

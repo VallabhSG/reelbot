@@ -67,6 +67,11 @@ DIALOGUE_BOOKENDS = """- DIALOGUE BOOKENDS (the format of the most-watched reels
   twist shot (punchline). Max 10 words each, everyday spoken English, no names of brands. Every
   other shot: line "" and speaker "".
   speaker: who says it, a character IN that shot who can talk: {speakers}. {mute}
+  Stage a set-up line as shot / reverse shot: over the listener's shoulder onto the speaker's face,
+  then the listener's reaction in close-up (a blush, wide eyes, a gulp). Stage a phone call as a
+  diagonal split screen: the caller on one side, the other person on the other, both visible.
+  IRONY CUT: a set-up line that promises one thing ("Don't worry, I'll be careful.") followed by a
+  smash cut to the exact opposite is the strongest laugh in this format.
   Lines must work for any viewer; the pictures still carry the story."""
 
 CRITIC_PASS = 7
@@ -106,12 +111,28 @@ METHOD (how the most-watched creator in this niche works)
 - Make the feeling PHYSICAL: blow the tiny everyday emotion up into anime spectacle (a shockwave that
   cracks the pavement, speed lines, flying across the city, slow-motion debris, a crater). The bigger
   the gap between the small cause and the epic effect, the funnier. End on one clear payoff image.
+- ESCALATION LADDER: the effect grows in 2-3 steps, each one bigger than the last (cracks under the
+  feet -> a crater -> a shockwave rolling down the whole street; or through one wall -> through the
+  next building -> out over the bay). Between two steps, cut back once to whoever caused it, perfectly
+  calm while the world breaks: that contrast is the joke.
+- On the biggest emotional reaction put an anime effect IN the picture: a radial colour burst
+  behind the face, heart eyes, a giant sweat drop, steam from the ears.
+- Comic timing: one beat of stillness right before the punchline (a held empty frame or a deadpan
+  stare), then the payoff. The last shot ends on a face turned toward the camera that shows the
+  feeling (a heart-eyes grin, a smug unimpressed stare).
 
 HOW THE BEST REELS IN THIS FORMAT ARE BUILT
-- One continuous scene in ONE location, in story order, no time jumps. Every shot starts exactly
-  where the previous one ended: "ends" is the visible state at the cut (position, pose, what is in
-  hand), and the next shot's action continues from it. Cut on the action (match cuts), never cut to
-  something unrelated.
+- The set-up is one continuous scene in ONE location, in story order, no time jumps. Every shot
+  starts exactly where the previous one ended: "ends" is the visible state at the cut (position,
+  pose, what is in hand), and the next shot's action continues from it. Cut on the action (match
+  cuts), never cut to something unrelated. The escalation may break OUT of the location (through a
+  wall, up into the sky, across the city) when the force carries a character there: keep it
+  continuous with the same framing, direction and light (the flying hero stays centred, rushing at
+  the camera, while the places behind change).
+- BLOCKING: say where the goal is relative to the character in the opening frame ("the open door
+  right beside her, screen right") and keep it in every shot. The character moves straight at the
+  goal by the shortest path, and goes THROUGH an opening head-on (a dive into a train doorway goes
+  from the platform into the car, across the train, never along it).
 - Keep screen direction: whoever moves, moves the same way on screen in every shot ("direction").
 - Short shots: {lo}-{hi} seconds each, summing to {seconds}. Fast shots (1-2 s) in escalate/clash,
   the climax may hold 3-4 s (slow motion). Whole seconds only.
@@ -126,7 +147,9 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
 
 STORYBOARD RULES
 - Beats in order, each at least once, never going backwards: {beats}.
-  hook = an instantly readable situation with stakes in the first second;
+  hook = an instantly readable situation with stakes in the first second. Shot 1 starts ON MOTION
+  or on a detail that asks a question (feet stepping out of a doorway, a hand grabbing keys, a
+  phone lighting up, a clock at 6:59). Never open on a static wide of someone just standing;
   escalate = the character commits, tension rises;
   clash = the big dynamic action, energy, motion;
   climax = the decisive instant (slow motion or extreme close-up);

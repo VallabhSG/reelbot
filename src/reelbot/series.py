@@ -122,6 +122,7 @@ class TakeSpec(BaseModel):
     climax_dip_s: float = 0.8  # music dips this long right before the climax and slams back on it
     quiet_before_twist_s: float = 0.6  # "one quiet second before the ending" after the burst
     flash_on_climax: bool = True  # a 2-frame white flash frame on the cut into the climax
+    impact_frame: bool = True  # then ~0.2 s anime impact frame: black & white under speed lines
     music_bpm: int = 120  # cuts fall on whole seconds, which are beats at 120 BPM
 
     @model_validator(mode="after")
@@ -152,6 +153,7 @@ class TitleCard(BaseModel):
     y_ratio: float = Field(0.62, ge=0.1, le=0.9, description="vertical position of the title, 0=top")
     in_video: bool = False  # burn the title into the first seconds (off: keep the hook shot clean)
     subtitle_font: Path | None = None  # spoken-line subtitles (default: DejaVu Sans Bold)
+    subtitle_color: str = "#FFD84A"  # anime-subtitle yellow
     cover: bool = True  # poster cover (best frame + title) uploaded as the Reels cover image
     cover_offset_ms: int = 1200  # fallback cover frame if no poster cover is used
 

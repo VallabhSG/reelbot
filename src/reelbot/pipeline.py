@@ -22,12 +22,15 @@ from pathlib import Path
 from typing import Any
 
 from .assemble import (
+    FPS,
+    IMPACT_FRAMES,
     AssemblyPlan,
     TakeAssembly,
     assemble,
     assemble_take,
     detect_cuts,
     probe_duration,
+    render_speed_lines,
     snap,
 )
 from .budget import BudgetExceeded, BudgetGuard
@@ -448,7 +451,7 @@ class Pipeline:
         take = Path(self.db.kv_get(f"take_path:{job_id}") or "")
         starts = shot_starts(plan)
         ci = self._climax_index(plan)
-        cuts = detect_cuts(take) if (t.flash_on_climax or t.quiet_before_twist_s) else []
+        cuts = detect_cuts(take) if (t.flash_on_climax or t.impact_frame or t.quiet_before_twist_s) else []
         climax_at = snap(float(starts[ci]), cuts)  # the model picks the exact cut frame
         dips = []
         if t.climax_dip_s > 0 and climax_at > t.climax_dip_s:  # tension: music drops, then slams back
@@ -458,6 +461,11 @@ class Pipeline:
             twist_at = snap(float(starts[beats.index("twist")]), cuts)
             dips.append((twist_at, twist_at + t.quiet_before_twist_s))
         flashes = [climax_at] if t.flash_on_climax and climax_at > 0 else []
+        impacts, speed_lines = [], None
+        if t.impact_frame and climax_at > 0:  # right after the flash: the anime impact frame
+            a = climax_at + (2 / FPS if flashes else 0)
+            impacts = [(a, a + IMPACT_FRAMES / FPS)]
+            speed_lines = render_speed_lines(self._dir(job_id) / "speed_lines.png")
         # shots with a spoken line: the model's own audio comes up, the music ducks, subtitles show
         speech = [
             (float(t0), float(t0 + s.seconds)) for s, t0 in zip(plan.shots, starts, strict=True) if s.line
@@ -469,7 +477,12 @@ class Pipeline:
             )
             for k, (s, t0) in enumerate(zip(plan.shots, starts, strict=True)):
                 if s.line:
-                    png = render_subtitle(s.line, font, self._dir(job_id) / f"sub_{k}.png")
+                    png = render_subtitle(
+                        s.line,
+                        font,
+                        self._dir(job_id) / f"sub_{k}.png",
+                        color=self.s.title_card.subtitle_color,
+                    )
                     subs.append((png, t0 + 0.15, t0 + s.seconds - 0.1))
         out = assemble_take(
             TakeAssembly(
@@ -483,6 +496,8 @@ class Pipeline:
                 speech=speech,
                 subtitles=subs,
                 flashes=flashes,
+                impacts=impacts,
+                speed_lines=speed_lines,
             )
         )
         self.db.update_job(job_id, video_path=str(out))

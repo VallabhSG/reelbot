@@ -128,7 +128,14 @@ and audio analysis of their reels, dyyhoang's published Seedance prompts, his Ai
    - Seedance 2.5 (what those accounts use): location plate + character sheets as references,
      sectioned prompt in the same layout as their published prompts.
 5. **Edit:** music-led mix over the model's own sound effects, music drops before the climax and
-   slams back, a flash frame on the climax cut, one quiet beat before the twist, -14 LUFS.
+   slams back, a flash frame plus a black-and-white anime impact frame (speed lines) on the climax
+   cut, one quiet beat before the twist, yellow anime subtitles, -14 LUFS.
+6. **Craft details from the top reels** (INK: 435K, 238K and 14K likes, studied frame by frame):
+   open on motion or a question-asking detail, never a static wide; spoken set-up as shot /
+   reverse shot, phone calls as a split screen; the irony cut ("Don't worry" -> smash cut to the
+   opposite); the effect escalates in 2-3 steps of scale with a cut back to the calm cause; anime
+   reaction effects in the picture; one still beat before the punchline; end on a face to camera.
+   The vibe-only reel without a stake got 17-30x fewer likes than the two with one.
 
 **Bake-off:** `bakeoff` plans one episode and renders it on every model in `take.bakeoff` (or the
 ones you type in the args box: `kling3 seedance2 seedance25`). Storyboard, plate, opening frame and

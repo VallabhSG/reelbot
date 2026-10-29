@@ -78,21 +78,24 @@ def _wrap(d: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_w: i
     return [*lines, cur] if cur else lines
 
 
-def render_subtitle(text: str, font_path: Path | None, out: Path, y_ratio: float = 0.70) -> Path:
-    """A spoken line as a transparent 1080x1920 overlay: white, black outline, above the Reels UI
-    (the bottom ~25% is covered by the caption and buttons)."""
+def render_subtitle(
+    text: str, font_path: Path | None, out: Path, y_ratio: float = 0.70, color: str = "#FFD84A"
+) -> Path:
+    """A spoken line as a transparent 1080x1920 overlay: anime-subtitle yellow with a black outline
+    (like the top reels in this niche), above the Reels UI (the bottom ~25% is covered by the
+    caption and buttons)."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    font = _font(font_path, 56)
+    font = _font(font_path, 52)
     lines = _wrap(d, text.strip(), font, int(W * 0.84))
-    step = 72
+    step = 66
     y0 = int(H * y_ratio) - step * (len(lines) - 1) // 2
     for i, ln in enumerate(lines):
         d.text(
             (W // 2, y0 + i * step),
             ln,
             font=font,
-            fill="#FFFFFF",
+            fill=color,
             anchor="mm",
             stroke_width=5,
             stroke_fill="#000000",

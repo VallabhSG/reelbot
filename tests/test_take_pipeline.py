@@ -222,3 +222,55 @@ def test_rejected_drafts_do_not_count_as_used_premises(db):
     db.update_job(a, status=JobStatus.REJECTED)
     db.update_job(b, status=JobStatus.PUBLISHED)
     assert db.past_titles() == ["METRO DASH (Last Metro)"]
+
+
+@needs_ffmpeg
+def test_impact_frame_goes_black_and_white_under_speed_lines_and_keeps_subtitles(tmp_path):
+    from PIL import Image
+
+    from reelbot.assemble import render_speed_lines
+    from reelbot.titlecard import render_subtitle
+
+    take = tmp_path / "take.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=30:d=4"]
+        + ["-pix_fmt", "yuv420p", str(take)],
+        check=True,
+    )
+    sub = render_subtitle("Two minutes!", None, tmp_path / "sub.png")
+    out = assemble_take(
+        TakeAssembly(
+            take,
+            4.0,
+            None,
+            0.0,
+            -8.0,
+            [],
+            tmp_path / "final.mp4",
+            subtitles=[(sub, 0.2, 1.5)],
+            flashes=[2.0],
+            impacts=[(2.07, 2.27)],
+            speed_lines=render_speed_lines(tmp_path / "lines.png"),
+        )
+    )
+
+    def frame(t):
+        png = tmp_path / f"f{t}.png"
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t), "-i", str(out), "-frames:v", "1", str(png)],
+            check=True,
+        )
+        return Image.open(png).convert("RGB")
+
+    def pixels(im):
+        small = im.resize((60, 100))
+        return [small.getpixel((x, y)) for x in range(60) for y in range(100)]
+
+    def colourful(im):
+        return sum(max(px) - min(px) > 40 for px in pixels(im))
+
+    assert colourful(frame(1.0)) > 500  # normal colour picture
+    impact = frame(2.15)
+    assert colourful(impact) < 50  # black & white
+    assert sum(min(px) > 230 for px in pixels(impact)) > 100  # white speed lines across the frame
+    assert colourful(frame(3.0)) > 500  # and back to colour
