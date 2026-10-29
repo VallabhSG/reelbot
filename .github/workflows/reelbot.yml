@@ -4,10 +4,10 @@ name: reelbot
 # pass, and pushes state back. All config + secrets come from ONE repo secret: ENV_FILE.
 on:
   schedule:
-    # Only the fixed times: Telegram taps start their own run through the relay (webhook mode), so
-    # nothing needs polling. 4 short runs a day keep a private repo far inside the free 2,000
-    # min/month. Each time has a backup 30 min later, because GitHub delays and sometimes drops
-    # scheduled runs; a backup that finds nothing to do exits in under a minute.
+    # BACKUP clock only. GitHub's scheduler rarely fires (2 runs out of hundreds due), so the relay
+    # Worker's Cloudflare Cron Triggers start the 10:05 and 19:32 IST runs (relay/telegram-relay.js),
+    # and Telegram taps start their own. These catch the case where Cloudflare or the GitHub API
+    # failed; a run that finds nothing to do exits in under a minute.
     - cron: "35 4 * * *"   # 10:05 IST: make the episode on episode days (series schedule.days)
     - cron: "5 5 * * *"    # 10:35 IST: backup
     - cron: "2 14 * * *"   # 19:32 IST: publish what's due, measure reels, Sunday report

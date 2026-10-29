@@ -82,6 +82,10 @@ Telegram, shows "On it…" on the button, stores the tap in the private state bu
      `BOT_TOKEN`, `WEBHOOK_SECRET` (same string as in ENV_FILE), `GITHUB_TOKEN`.
 4. Actions → `webhook`, args = the Worker's URL (`https://reelbot-relay.<you>.workers.dev`).
    `reelbot webhook off` goes back to polling (and remove the secret from ENV_FILE).
+5. **The clock (needed, free):** GitHub's own schedule hardly ever fires, so the Worker starts the
+   fixed-time runs. Worker → Settings → Triggers → Cron Triggers → Add, twice (times are UTC):
+   `35 4 * * *` (10:05 IST, make the episode) and `2 14 * * *` (19:32 IST, publish). The Free plan
+   allows 5 per account. Check them under the Worker's Logs after the next 19:32.
 
 ### YouTube Shorts (optional, free)
 
@@ -121,8 +125,9 @@ once they qualify for Content Monetization; uploading the clean file avoids the 
 
 **GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` at the fixed
 times only: 10:05 IST (make the episode on episode days) and 19:32 IST (publish, measure, Sunday
-report), each with a backup 30 min later. Telegram taps start their own run through the relay
-(*Instant buttons*), so nothing polls. Each run pulls the DB and in-flight renders from the private
+report). The relay Worker's Cron Triggers start those runs (*Instant buttons*, step 5): GitHub's
+own `schedule:` rarely fires, so it is only a backup. Telegram taps start their own run through
+the relay, so nothing polls. Each run pulls the DB and in-flight renders from the private
 `S3_STATE_BUCKET`, does one pass (Telegram buttons → generate if due → publish if due), pushes state
 back. Put the whole `.env` into one repo secret named `ENV_FILE`. Kick off runs by hand from
 Actions → reelbot → Run workflow: pick a command and, if it needs them, type its arguments in the
