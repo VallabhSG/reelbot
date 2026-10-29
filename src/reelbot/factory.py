@@ -17,6 +17,7 @@ from .providers.stub import StubLLM, StubMedia, StubMusic
 from .series import Series, load_series
 from .storage import LocalStorage, S3Storage
 from .telegram import ConsoleNotifier, Telegram
+from .youtube import DryRunYouTube, YouTubePublisher
 
 
 @dataclass
@@ -40,6 +41,7 @@ def build(settings: Settings, series: Series | None = None) -> App:
         notifier = ConsoleNotifier()
         storage = LocalStorage()
         publisher = DryRunPublisher()
+        youtube = DryRunYouTube()
     else:
         llm = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
         media = HiggsfieldMedia(
@@ -63,6 +65,13 @@ def build(settings: Settings, series: Series | None = None) -> App:
             base_url=settings.ig_graph_base_url,
             version=settings.ig_graph_version,
         )
+        youtube = (
+            YouTubePublisher(
+                settings.youtube_client_id, settings.youtube_client_secret, settings.youtube_refresh_token
+            )
+            if settings.youtube_enabled
+            else None
+        )
 
     pipeline = Pipeline(
         series=series,
@@ -75,5 +84,6 @@ def build(settings: Settings, series: Series | None = None) -> App:
         notifier=notifier,
         storage=storage,
         publisher=publisher,
+        youtube=youtube if series.youtube.enabled else None,
     )
     return App(settings, series, db, guard, pipeline)

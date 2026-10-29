@@ -164,6 +164,21 @@ class CaptionSpec(BaseModel):
     hashtags: list[str] = Field(default_factory=list)
 
 
+class YouTubeSpec(BaseModel):
+    """YouTube Shorts: the same reel, posted right after Instagram once YOUTUBE_* credentials exist.
+    Placeholders: {hook_line} (the caption hook's first line), {hook}, {title}, {emoji}, {category},
+    {n}, {series}, {credits}, {hashtags}."""
+
+    enabled: bool = True
+    title: str = "{hook_line} {emoji}"
+    description: str = "{series} · Episode {n}: {title}\n\n{hook}\n\n{credits}\n\n{hashtags} #shorts"
+    category_id: str = "1"  # Film & Animation
+    made_for_kids: bool = False
+    # YouTube's "altered or synthetic content" label is required for realistic footage; obvious
+    # animation doesn't need it. Set true to label every Short anyway.
+    synthetic_media: bool = False
+
+
 class Budget(BaseModel):
     monthly_usd: float = 40.0
     per_reel_usd: float = 3.0
@@ -192,6 +207,7 @@ class Series(BaseModel):
     music: MusicSpec = MusicSpec()
     title_card: TitleCard = TitleCard()
     caption: CaptionSpec = CaptionSpec()
+    youtube: YouTubeSpec = YouTubeSpec()
     budget: Budget = Budget()
     schedule: Schedule = Schedule()
 

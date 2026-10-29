@@ -8,6 +8,7 @@ reelbot reject ID [NOTE…]     reject; the note (why) teaches the next episodes
 reelbot note ID NOTE…         tell the bot what worked or didn't in an episode (no ID: the series)
 reelbot lessons [--update]    what the bot has learned from your notes + the reels' numbers
 reelbot stats                 fetch Instagram numbers for posted reels now and list them
+reelbot youtube ID            post a reel to YouTube Shorts now (e.g. one posted before YouTube was set up)
 reelbot regen ID SHOT         regenerate shot number SHOT (1-based)  [v2 shot reels]
 reelbot retake ID [NOTE…]     render the whole take again             [v3 one-take reels]
 reelbot bakeoff [MODEL ...]   one episode rendered on several video models, to pick a winner
@@ -102,6 +103,14 @@ def cmd_check(_: argparse.Namespace) -> int:
                 f"{'✗' if missing else '✓'} {group}" + (f": missing {', '.join(missing)}" if missing else "")
             )
             ok &= not missing
+        if not series.youtube.enabled:
+            print("– YouTube Shorts: off in the series file (youtube.enabled)")
+        elif s.youtube_enabled:
+            print("✓ YouTube Shorts: every reel is also posted as a Short")
+        else:
+            print(
+                "– YouTube Shorts: off (set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN)"
+            )
         if series.music.provider == "elevenlabs" and not s.elevenlabs_api_key:
             print("✗ Music: missing ELEVENLABS_API_KEY")
             ok = False
@@ -206,6 +215,14 @@ def cmd_lessons(a: argparse.Namespace) -> int:
     if a.update:
         app.pipeline.learner.update_lessons(force=True)
     print(app.pipeline.learner.lessons_text())
+    return 0
+
+
+def cmd_youtube(a: argparse.Namespace) -> int:
+    app = build(get_settings())
+    app.db.kv_set(f"youtube_tries:{a.job}", "0")
+    video_id = app.pipeline.post_youtube(a.job)
+    print(f"job {a.job} on YouTube Shorts: https://youtube.com/shorts/{video_id}")
     return 0
 
 
@@ -339,6 +356,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--update", action="store_true", help="rewrite them now from all the evidence")
     p.set_defaults(fn=cmd_lessons)
     sub.add_parser("stats").set_defaults(fn=cmd_stats)
+    p = sub.add_parser("youtube")
+    p.add_argument("job", type=int)
+    p.set_defaults(fn=cmd_youtube)
     p = sub.add_parser("regen")
     p.add_argument("job", type=int)
     p.add_argument("shot", type=int)

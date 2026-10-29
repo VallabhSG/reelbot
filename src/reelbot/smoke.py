@@ -147,5 +147,15 @@ def run_smoke(s: Settings) -> int:
 
     results.append(_try("Instagram", instagram))
 
+    if s.youtube_enabled:
+
+        def youtube() -> str:
+            from .youtube import YouTubePublisher
+
+            yt = YouTubePublisher(s.youtube_client_id, s.youtube_client_secret, s.youtube_refresh_token)
+            return f"channel '{yt.channel_title()}' (uploads go here)"
+
+        results.append(_try("YouTube", youtube))
+
     print(f"\n{sum(results)}/{len(results)} checks passed · month spend ${guard.month_spend():.4f}")
     return 0 if all(results) else 1

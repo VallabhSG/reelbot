@@ -52,10 +52,12 @@ from .storyboard import (
 )
 from .telegram import cast_keyboard, cast_more_keyboard, review_keyboard, take_keyboard
 from .titlecard import render_cover, render_subtitle, render_title_card
+from .youtube import shorts_url
 
 log = logging.getLogger(__name__)
 
 IG_CAPTION_MAX = 2200
+YOUTUBE_TRIES = 3
 IG_HASHTAG_MAX = 30
 
 
@@ -81,6 +83,7 @@ class Pipeline:
         notifier: Any,
         storage: Storage,
         publisher: Any,
+        youtube: Any = None,
     ):
         self.s = series
         self.db = db
@@ -92,6 +95,7 @@ class Pipeline:
         self.notifier = notifier
         self.storage = storage
         self.publisher = publisher
+        self.youtube = youtube  # None = YouTube Shorts off
         self.learner = Learner(db, series, planner.llm, publisher, notifier)
 
     # ================================================================== cast
@@ -757,7 +761,72 @@ class Pipeline:
         self.db.update_job(job_id, status=JobStatus.PUBLISHED, ig_media_id=media_id)
         link = self.publisher.permalink(media_id) or media_id
         self.notifier.send_message(f"🚀 #{job_id} is live: {link}")
+        self.post_youtube_safely(job_id)
         return media_id
+
+    # ---- YouTube Shorts: the same reel, right after Instagram; a failure never touches the IG post
+    def youtube_meta(self, job_id: int) -> tuple[str, str, list[str]]:
+        job = self.db.get_job(job_id)
+        plan = self.db.plan(job_id)
+        yt, cap = self.s.youtube, self.s.caption
+        model = self.model_label(self.take_model_for(job_id)) if self.s.take.enabled else ""
+        values = {
+            "hook_line": plan.hook.strip().splitlines()[0].strip() if plan.hook.strip() else plan.title,
+            "hook": plan.hook.strip(),
+            "title": plan.title,
+            "emoji": plan.emoji,
+            "category": plan.category,
+            "n": job["episode_no"],
+            "series": self.s.series.name,
+            "credits": cap.credits.strip().replace("{model}", model or "Kling"),
+            "hashtags": " ".join(cap.hashtags[:3]),  # YouTube shows the first 3 above the title
+        }
+        title = " ".join(yt.title.format(**values).split())
+        description = yt.description.format(**values).strip()
+        return title, description, [*cap.hashtags, self.s.series.name]
+
+    def post_youtube(self, job_id: int) -> str:
+        if self.youtube is None:
+            raise ValueError(
+                "YouTube is off: set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN"
+            )
+        if done := self.db.kv_get(f"youtube_id:{job_id}"):
+            return done
+        job = self.db.get_job(job_id)
+        if not job:
+            raise KeyError(f"job {job_id} not found")
+        path = Path(job["video_path"] or "")
+        if not path.exists():  # a later run: fetch the public copy Instagram was given
+            if not job["public_url"]:
+                raise ValueError(f"job {job_id} has no video to upload")
+            path = download(job["public_url"], self._dir(job_id) / "youtube.mp4")
+        title, description, tags = self.youtube_meta(job_id)
+        yt = self.s.youtube
+        video_id = self.youtube.upload_short(
+            path,
+            title,
+            description,
+            tags,
+            category_id=yt.category_id,
+            made_for_kids=yt.made_for_kids,
+            synthetic_media=yt.synthetic_media,
+        )
+        self.db.kv_set(f"youtube_id:{job_id}", video_id)
+        self.notifier.send_message(f"▶️ #{job_id} is on YouTube Shorts: {shorts_url(video_id)}")
+        return video_id
+
+    def post_youtube_safely(self, job_id: int) -> str | None:
+        if self.youtube is None or self.db.kv_get(f"youtube_id:{job_id}"):
+            return None
+        tries = int(self.db.kv_get(f"youtube_tries:{job_id}") or 0) + 1
+        self.db.kv_set(f"youtube_tries:{job_id}", str(tries))
+        try:
+            return self.post_youtube(job_id)
+        except Exception as e:
+            log.exception("youtube upload of #%s failed", job_id)
+            more = " Trying again on the next runs." if tries < YOUTUBE_TRIES else ""
+            self.notifier.send_message(f"⚠️ YouTube upload of #{job_id} failed: {e}"[:900] + more)
+            return None
 
     def publish_due(self, now: datetime | None = None) -> list[str]:
         now_iso = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
@@ -768,4 +837,9 @@ class Pipeline:
                     published.append(self.publish(job["id"]))
                 except Exception:
                     log.exception("publish failed for job %s", job["id"])
+        if self.youtube is not None:  # Shorts that failed earlier (a quota blip, an expired token)
+            for job in self.db.jobs_with_status(JobStatus.PUBLISHED):
+                tries = int(self.db.kv_get(f"youtube_tries:{job['id']}") or 0)
+                if 0 < tries < YOUTUBE_TRIES:  # reels posted before YouTube was set up have 0 tries
+                    self.post_youtube_safely(job["id"])
         return published

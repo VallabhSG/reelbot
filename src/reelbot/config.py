@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     ig_graph_base_url: str = "https://graph.instagram.com"
     ig_graph_version: str = ""  # e.g. "v23.0"; empty = unversioned path
 
+    # --- YouTube Shorts (optional: the same reel goes up as a Short; see README) ---
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    youtube_refresh_token: str = ""
+
     @model_validator(mode="after")
     def _split_hf_key(self) -> Settings:
         key = self.hf_api_key.strip()
@@ -68,6 +73,10 @@ class Settings(BaseSettings):
                 )
             self.hf_api_key_id, self.hf_api_key_secret = (p.strip() for p in key.split(":", 1))
         return self
+
+    @property
+    def youtube_enabled(self) -> bool:
+        return bool(self.youtube_client_id and self.youtube_client_secret and self.youtube_refresh_token)
 
     @property
     def db_path(self) -> Path:

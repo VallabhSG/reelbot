@@ -63,6 +63,25 @@ pytest
    weekly. A new token pasted into `.env` later replaces the refreshed copy automatically.
 8. `DRY_RUN=false`, `reelbot check` until all green, `reelbot make` once by hand, then deploy.
 
+### YouTube Shorts (optional, free)
+
+Every reel can also go up as a YouTube Short right after Instagram (same file; a vertical video up
+to 3 minutes is a Short). Uploading through the API costs nothing.
+
+1. Make the channel (YouTube → Create a channel; a Brand Account keeps it separate from your name).
+2. console.cloud.google.com → new project → APIs & Services → enable **YouTube Data API v3**.
+3. OAuth consent screen: External, add the scopes `youtube.upload` and `youtube.readonly`, then
+   **Publish app → In production**. In "Testing" Google kills the token after 7 days. For your own
+   account no verification is needed: you'll click "Advanced → continue" past the unverified warning.
+4. Credentials → Create OAuth client ID → **Web application**, authorised redirect URI
+   `https://developers.google.com/oauthplayground`.
+5. developers.google.com/oauthplayground → ⚙ → *Use your own OAuth credentials* → paste the client
+   id and secret → scopes `https://www.googleapis.com/auth/youtube.upload
+   https://www.googleapis.com/auth/youtube.readonly` → Authorize APIs (pick the channel) →
+   *Exchange authorization code for tokens* → copy the **refresh token**.
+6. Add `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` to `.env` / ENV_FILE.
+   `reelbot smoke` shows the channel name. `reelbot youtube ID` posts a reel that went out before.
+
 ## Deploy
 
 **GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` every 30 min
