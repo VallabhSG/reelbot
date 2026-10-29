@@ -117,6 +117,16 @@ METHOD (how the most-watched creator in this niche works)
   calm while the world breaks: that contrast is the joke.
 - On the biggest emotional reaction put an anime effect IN the picture: a radial colour burst
   behind the face, heart eyes, a giant sweat drop, steam from the ears.
+- THE CHALLENGER'S ENTRANCE: early on, one low-angle extreme close-up of the hero gearing up like a
+  fighter before a boss (tying her hair back, cracking her knuckles, a glint across her glasses,
+  her sneakers planting on the ground), then cut wide. One second is enough.
+- THE TURN IS AN INSERT: the winning move starts on a tight insert of a hand on the one object that
+  matters (a thumb pressing the key fob, fingers closing on the plug, a finger over the snooze
+  button), then cut wide to what it causes.
+- A WITNESS SELLS IT: right after the winning move, one shot of someone watching it (Mochi, a
+  bystander, Ren when he is in the episode) reacting big: jaw drop, a drink spilling, glasses
+  sliding down the nose. The audience feels the payoff through them. When shots are short, this
+  witness can be the twist shot itself (Mochi's deadpan stare).
 - Comic timing: one beat of stillness right before the punchline (a held empty frame or a deadpan
   stare), then the payoff. The last shot ends on a face turned toward the camera that shows the
   feeling (a heart-eyes grin, a smug unimpressed stare).
