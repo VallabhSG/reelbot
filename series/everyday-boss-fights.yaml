@@ -11,7 +11,9 @@ series:
     clash (the mundane task staged as an epic shonen battle: speed lines, debris, low hero angles),
     climax (the decisive instant, often slow motion or an extreme close-up), twist (a deadpan
     anticlimax: Mochi steals the win, or the problem solves itself in the dumbest way).
-    Universal, not tied to one country. Wholesome humour; never cruel, never romantic.
+    Universal, not tied to one country. Wholesome humour, never cruel. Light romance is welcome:
+    Juno's crush on Ren (a call, a text, a first date, at most a peck on the cheek), her feelings
+    blown up into anime spectacle while Mochi judges. Both are adults; never sexual or explicit.
   total_episodes: 100
   header_template: "{series}\nBoss {n} / {total}\n{emoji} {category}"
 
@@ -38,6 +40,12 @@ characters:
       Mochi, a chubby orange tabby cat with white paws, a tiny red knitted scarf and a permanently
       unimpressed half-lidded expression
     speaks: false        # a cat: sounds only, never lines
+  - name: Ren
+    short: "curly-haired young man in round glasses and a green bomber jacket"
+    description: >
+      Ren, Juno's crush, a young man in his mid-20s with warm brown skin, soft dark curly hair, round
+      wire-rimmed glasses, a forest-green bomber jacket over a plain white tee, light-wash jeans and
+      white canvas sneakers; tall, calm, kind, a little oblivious, a shy half-smile
 
 cast:
   candidates: 3        # options per character to pick from in Telegram (~$0.04 each)
@@ -65,6 +73,14 @@ episodes:
     spectacle: "slow-motion leap with speed lines, cushions and popcorn exploding into the air, the lamp swinging wildly"
     payoff: "the cable is too short: Juno lies stretched flat on the floor holding the phone up at full arm's length, and Mochi sits down on her back"
     homage: "a heist-movie vault dive in slow motion over a laser grid"
+  - category: "He Called"
+    emoji: "📞"
+    location: "Juno's small apartment bedroom at dusk, bed by a big window, potted plants on the sill, city skyline outside"
+    stake: 'Her phone buzzes with Ren calling; diagonal split screen, Ren on a rooftop says "So... ramen, Saturday?" and Juno, very calm, says "Yeah. Cool. Sure."'
+    move: "Juno hangs up, sets the phone down neatly, then screams silently into her pillow, both fists pounding the bed"
+    spectacle: "her joy erupts as a pink shockwave: every plant on the sill bursts into bloom, the window glass ripples, the wave rolls out over the city and lights up every window in the skyline"
+    payoff: "across the city on his rooftop, Ren is doing the exact same pillow scream into his jacket; on Juno's bed, Mochi covers his ears with his paws"
+    homage: "a romantic-comedy split-screen phone call where both sides secretly mirror each other"
   - category: "Pickle Jar"
     emoji: "🫙"
     location: "a small bright kitchen, a big glass pickle jar on the counter"
@@ -130,11 +146,13 @@ episodes:
     payoff: "the spider waves one tiny leg; Juno slowly lowers the broom and waves back. Mochi watches from the bathtub edge"
     homage: "a legendary hero lifting the sacred sword to the sky as lightning strikes"
   - {category: "Snooze Button", emoji: "⏰", idea: "6:00 AM alarm duel, her hand charges with energy for the snooze strike; twist: it's Sunday"}
+  - {category: "Shared Umbrella", emoji: "☔", idea: "sudden rain, Ren offers to share his tiny umbrella; Juno's heartbeat summons a storm of cherry blossoms; twist: they both end up soaked, laughing, and Mochi is dry under the umbrella"}
   - {category: "One Trip", emoji: "🛍️", idea: "carrying every grocery bag in one trip, arms glowing with power; twist: her keys are in the pocket under all the bags"}
   - {category: "Flat-Pack Furniture", emoji: "🪑", idea: "the instruction manual as an ancient scroll, she assembles at god speed; twist: one screw left over"}
   - {category: "One Bar of Wi-Fi", emoji: "📶", idea: "climbing onto the rooftop holding her phone to the sky; twist: the message finally sends: a thumbs up"}
   - {category: "Melting Ice Cream", emoji: "🍦", idea: "race against the summer sun to finish the cone; twist: the scoop falls, Mochi is waiting below"}
   - {category: "Monday Morning", emoji: "📅", idea: "Monday as a giant shadow kaiju over the city; twist: she defeats it and it splits into Tuesday"}
+  - {category: "First Date Outfit", emoji: "👗", idea: "trying on outfits for the ramen date at light speed, clothes exploding everywhere like a tornado; twist: Ren arrives in the exact same mustard hoodie"}
   - {category: "Exam Clock", emoji: "✏️", idea: "last minute of the exam, writing at light speed; twist: she forgot to write her name"}
   - {category: "Laundry Mountain", emoji: "🧺", idea: "folding a laundry tower with martial-arts precision; twist: Mochi dives into the tower"}
   - {category: "Flash Sale", emoji: "⏳", idea: "checkout countdown 3, 2, 1, she taps buy; twist: sold out"}
