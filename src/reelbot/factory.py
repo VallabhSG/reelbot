@@ -14,6 +14,7 @@ from .planner import Planner
 from .providers.higgsfield import HiggsfieldClient, HiggsfieldMedia
 from .providers.llm import LLMClient
 from .providers.music import ElevenLabsMusic, LibraryMusic, NoMusic
+from .providers.openrouter_video import OpenRouterVideo
 from .providers.stub import StubLLM, StubMedia, StubMusic
 from .series import Series, load_series
 from .storage import LocalStorage, S3Storage
@@ -51,6 +52,15 @@ def build(settings: Settings, series: Series | None = None) -> App:
             series.models,
             guard,
             series.base_dir,
+            openrouter=(
+                OpenRouterVideo(
+                    settings.openrouter_api_key,
+                    settings.openrouter_base_url,
+                    work_dir=settings.data_dir / "openrouter",
+                )
+                if series.uses_provider("openrouter")
+                else None
+            ),
         )
         if series.music.provider == "elevenlabs":
             music = ElevenLabsMusic(settings.elevenlabs_api_key, series.music, guard)

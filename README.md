@@ -48,6 +48,11 @@ pytest
    ~$10. Open the Kling 2.5 image-to-video model page and paste its endpoint ID and input field names
    into `models.video`; check the Soul page for the aspect-ratio field name in `models.image`.
    Those IDs aren't in Higgsfield's public docs index, which is why they're config, not code.
+   **OpenRouter** (for models with `provider: openrouter`, e.g. the default Seedance 2.0 take: the
+   same ByteDance model at about half Higgsfield's price). openrouter.ai → Credits → add ~$10 →
+   Keys → Create key, with a **credit limit** of your monthly budget ($40) as a hard stop → put
+   `OPENROUTER_API_KEY=` in `.env` / ENV_FILE. `reelbot smoke` checks the key and the model without
+   rendering anything. Higgsfield still makes the images (opening frame, plates, cast sheets).
 3. **LLM** — any OpenAI-compatible endpoint. Groq's free tier is enough for one plan a day.
 4. **Music** — ElevenLabs Music API needs a paid plan. To start at $0, set `music.provider: library`
    and put tracks you have rights to in `assets/music/`.
@@ -224,9 +229,9 @@ Every reel teaches the next one:
   See them with `lessons` or `/lessons`; a note that changes them is answered with the new lesson.
 - **Weekly report** (Sunday evening, Telegram): views, % watched vs last week, best reel, lessons.
 - **Posting days.** `schedule.stagger` spreads each reel over the platforms, one a day from the
-  approval slot (2 reels a week cover 6 days). With `rotate: true` the order shifts weekly, so each
-  platform tries every weekday in 3 weeks; the weekly report and `stats` show average views per
-  posting day per platform, which tells you which 2 days to settle on.
+  approval slot (3 reels a week, Tue/Thu/Sat, cover every day). With `rotate: true` the order shifts
+  weekly, so each platform tries every weekday in 3 weeks; the weekly report and `stats` show average
+  views per posting day per platform, which tells you which days to settle on.
 
 ## v2: how a reel is made
 
@@ -243,13 +248,14 @@ Every reel teaches the next one:
 5. **Edit + cover.** ffmpeg cut with music; the title goes on a poster cover (climax frame + title),
    uploaded as the Reels cover, so the hook shot stays clean.
 
-## Cost (one 15 s reel, list prices; Higgsfield often runs ~30% below these)
+## Cost (one 15 s reel, list prices)
 
 | Model | Per reel | 3 a week |
 |---|---|---|
-| Kling 3.0 (opening frame + take) | ~$1.90 | ~$25/month |
-| Seedance 2.0 | ~$4.70 | ~$61/month |
-| Seedance 2.5 | ~$8.50 | ~$110/month |
+| Kling 3.0 on Higgsfield (opening frame + take) | ~$1.90 | ~$25/month |
+| Seedance 2.0 on OpenRouter (default) | ~$2.40 | ~$31/month |
+| Seedance 2.0 on Higgsfield (`seedance2_hf`) | ~$4.70 | ~$61/month |
+| Seedance 2.5 on Higgsfield | ~$8.50 | ~$110/month |
 
 The guard stops at `budget.monthly_usd` ($40) and `budget.per_reel_usd` ($9). Pick the model by eye
 in a bake-off, then set reels/week to fit the budget.

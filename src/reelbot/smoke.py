@@ -75,6 +75,23 @@ def run_smoke(s: Settings) -> int:
 
     results.append(_try("Higgsfield", higgsfield))
 
+    def openrouter() -> str:
+        if not series.uses_provider("openrouter"):
+            return "skipped (no model in the series file uses OpenRouter)"
+        from .providers.openrouter_video import OpenRouterVideo
+
+        client = OpenRouterVideo(s.openrouter_api_key, s.openrouter_base_url)
+        key = client.key_info()
+        names = [n for n in series.take_model_names() if series.models.takes[n].provider == "openrouter"]
+        for n in names:
+            client.video_model(series.models.takes[n].endpoint)
+        limit = key.get("limit_remaining", key.get("limit"))
+        left = f", ${float(limit):.2f} left on the key" if isinstance(limit, int | float) else ""
+        models = ", ".join(series.models.takes[n].endpoint for n in names)
+        return f"key ok ({models} available{left}); no video rendered"
+
+    results.append(_try("OpenRouter", openrouter))
+
     def elevenlabs() -> str:
         if series.music.provider != "elevenlabs":
             return f"skipped (music.provider={series.music.provider})"

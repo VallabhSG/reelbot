@@ -75,8 +75,10 @@ class ShotSpec(BaseModel):
 
 
 class ModelSpec(BaseModel):
-    """One Higgsfield endpoint. `input` is a template; see templating.render."""
+    """One generation model. `input` is a template; see templating.render. On Higgsfield `endpoint` is
+    the endpoint id; on OpenRouter it is the model id (e.g. bytedance/seedance-2.0)."""
 
+    provider: Literal["higgsfield", "openrouter"] = "higgsfield"
     endpoint: str
     input: dict[str, Any]
     output_path: str
@@ -284,6 +286,12 @@ class Series(BaseModel):
         if not self.take.enabled:
             return []
         return list(dict.fromkeys(n for n in [self.take.model, *self.take.bakeoff] if n))
+
+    def uses_provider(self, provider: str) -> bool:
+        """True if any model this series can call (image, shots, the take model, bake-off) runs there."""
+        specs = [self.models.image, self.models.video]
+        specs += [self.models.takes[n] for n in self.take_model_names() if n in self.models.takes]
+        return any(spec.provider == provider for spec in specs)
 
     def estimate_reel_cost(self, take_model: str | None = None) -> float:
         """First take. v2: location plate + n shots + music. v3: plate + opening frame + one take + music."""

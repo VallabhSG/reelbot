@@ -74,7 +74,7 @@ def cmd_check(_: argparse.Namespace) -> int:
             spec = series.models.takes[name]
             role = "default" if name == t.model else "bake-off"
             print(
-                f"  take [{role}] {spec.label or name}: {spec.endpoint} "
+                f"  take [{role}] {spec.label or name}: {spec.endpoint} on {spec.provider} "
                 f"~${series.estimate_reel_cost(name):.2f}/reel"
             )
     else:
@@ -105,7 +105,10 @@ def cmd_check(_: argparse.Namespace) -> int:
     if s.dry_run:
         print("✓ DRY_RUN=true: stub providers, no credentials needed")
     else:
-        for group, fields in REQUIRED_LIVE.items():
+        required = dict(REQUIRED_LIVE)
+        if series.uses_provider("openrouter"):
+            required["OpenRouter"] = ["openrouter_api_key"]
+        for group, fields in required.items():
             missing = [f.upper() for f in fields if not getattr(s, f)]
             print(
                 f"{'✗' if missing else '✓'} {group}" + (f": missing {', '.join(missing)}" if missing else "")

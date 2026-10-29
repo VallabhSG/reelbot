@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     hf_api_key_secret: str = ""
     hf_base_url: str = "https://api.higgsfield.ai"
 
+    # --- OpenRouter (video models with `provider: openrouter` in the series file, e.g. Seedance 2.0) ---
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
     # --- ElevenLabs (music) ---
     elevenlabs_api_key: str = ""
 

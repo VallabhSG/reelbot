@@ -24,6 +24,7 @@ from ..budget import BudgetGuard
 from ..series import Character, Models, ModelSpec
 from ..templating import extract, render
 from ._http import retryable as _retryable
+from .openrouter_video import OpenRouterVideo
 
 log = logging.getLogger(__name__)
 
@@ -136,15 +137,24 @@ class HiggsfieldClient:
 
 
 class HiggsfieldMedia:
-    """Runs the image/video ModelSpecs from the series YAML through Higgsfield, under the budget guard."""
+    """Runs the image/video ModelSpecs from the series YAML under the budget guard: on Higgsfield, or
+    on OpenRouter for specs with `provider: openrouter` (uploads/references stay on Higgsfield)."""
 
     provider_name = "higgsfield"
 
-    def __init__(self, client: HiggsfieldClient, models: Models, guard: BudgetGuard, base_dir: Path):
+    def __init__(
+        self,
+        client: HiggsfieldClient,
+        models: Models,
+        guard: BudgetGuard,
+        base_dir: Path,
+        openrouter: OpenRouterVideo | None = None,
+    ):
         self.client = client
         self.models = models
         self.guard = guard
         self.base_dir = base_dir
+        self.openrouter = openrouter
         self._ref_cache: dict[str, tuple[float, str]] = {}
 
     def _call(
@@ -152,7 +162,14 @@ class HiggsfieldMedia:
     ) -> str:
         cost = spec.estimate(seconds)
         self.guard.check(cost, job_id)
-        result = self.client.run(spec.endpoint, render(spec.input, ctx))
+        body = render(spec.input, ctx)
+        if spec.provider == "openrouter":
+            if self.openrouter is None:
+                raise ValueError(f"{spec.endpoint} runs on OpenRouter: set OPENROUTER_API_KEY")
+            url, actual = self.openrouter.generate(spec.endpoint, body)
+            self.guard.record("openrouter", f"{label} {spec.endpoint}", actual or cost, job_id)
+            return url
+        result = self.client.run(spec.endpoint, body)
         url = extract(result, spec.output_path)
         self.guard.record(self.provider_name, f"{label} {spec.endpoint}", cost, job_id)
         return url
