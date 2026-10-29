@@ -126,6 +126,6 @@ def test_one_platform_failing_does_not_stop_the_other(dry_settings):
     video.parent.mkdir(parents=True, exist_ok=True)
     video.write_bytes(b"mp4")
     app.db.update_job(jid, status=JobStatus.PUBLISHED, video_path=str(video), caption="c")
-    out = app.pipeline.cross_post(jid)
+    out = app.pipeline.cross_post(jid, after_publish=True)
     assert out == {"facebook": "fb-dryrun-1"}
     assert any("YouTube upload of #" in m and "channel suspended" in m for m in app.pipeline.notifier.sent)

@@ -320,3 +320,8 @@ schedule:
   generate_at: "10:00"
   publish_at: "19:30"
   days: [tue, fri]
+  # Each reel goes to one platform a day: the Tue reel on Tue/Wed/Thu, the Fri reel on Fri/Sat/Sun.
+  # rotate: the order shifts every week, so in 3 weeks each platform has tried every day; the
+  # weekly report ("Views by posting day") then shows which 2 days to keep.
+  stagger: [instagram, youtube, facebook]
+  rotate: true

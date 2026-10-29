@@ -197,7 +197,12 @@ class Worker:
                 self.p.approve(job_id, when)
                 self.tg.answer_callback(cb["id"], "Approved")
                 self.tg.clear_keyboard(msg_id)
-                self.tg.send_message(f"✅ #{job_id} approved, posting at {when:%a %H:%M}", reply_to=msg_id)
+                plan = (
+                    self.p.release_plan_text(job_id, self.tz) if hasattr(self.p, "release_plan_text") else ""
+                )
+                self.tg.send_message(
+                    f"✅ #{job_id} approved: {plan or f'posting at {when:%a %H:%M}'}", reply_to=msg_id
+                )
             elif action == "x":
                 self.p.reject(job_id)
                 self.tg.answer_callback(cb["id"], "Rejected")

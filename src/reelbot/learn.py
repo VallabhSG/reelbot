@@ -179,18 +179,101 @@ def planner_guidance(db: DB) -> str:
     return "\n".join(lines)
 
 
+PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube", "facebook": "Facebook"}
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def released_at(db: DB, job: dict[str, Any], platform: str) -> datetime | None:
+    """When a platform got the reel: its staggered slot, else the Instagram slot."""
+    raw = db.kv_get(f"slots:{job['id']}")
+    slots = json.loads(raw) if raw else {}
+    return (
+        _parse_time(slots.get(platform))
+        or _parse_time(job["publish_after"])
+        or _parse_time(job["updated_at"])
+    )
+
+
+def day_report(db: DB, tz: Any) -> str:
+    """Average views per weekday per platform, from posts at least 48 h old. The point of
+    schedule.rotate: after a few weeks this says which two days to keep."""
+    now = datetime.now(UTC)
+    by: dict[str, dict[int, list[float]]] = {}
+    jobs = {j["id"]: j for j in db.jobs_with_status(JobStatus.PUBLISHED, JobStatus.APPROVED)}
+    rows = [((jid, "instagram"), m) for jid, m in db.metrics().items()] + list(db.platform_metrics().items())
+    for (jid, platform), m in rows:
+        job, views = jobs.get(jid), m["data"].get("views")
+        at = released_at(db, job, platform) if job else None
+        if views is None or not at or now - at < METRICS_SETTLED:
+            continue
+        by.setdefault(platform, {}).setdefault(at.astimezone(tz).weekday(), []).append(views)
+    if not by:
+        return ""
+    lines = ["📅 Views by posting day (avg, posts 48h+ old):"]
+    thin = False
+    for platform in ("instagram", "youtube", "facebook"):
+        days = by.get(platform)
+        if not days:
+            continue
+        avg = sorted(((sum(v) / len(v), d, len(v)) for d, v in days.items()), reverse=True)
+        thin |= any(n < 3 for _, _, n in avg)
+        cells = " · ".join(f"{WEEKDAYS[d]} {a:,.0f} ({n})" for a, d, n in avg)
+        lines.append(f"{PLATFORM_NAMES[platform]}: {cells}")
+    if thin:
+        lines.append("(n) = posts; under 3 per day is still mostly noise.")
+    return "\n".join(lines)
+
+
 class Learner:
-    def __init__(self, db: DB, series: Series, llm: Any, publisher: Any, notifier: Any):
+    def __init__(
+        self,
+        db: DB,
+        series: Series,
+        llm: Any,
+        publisher: Any,
+        notifier: Any,
+        platforms: Any = None,
+        tz: Any = UTC,
+    ):
         self.db = db
         self.s = series
         self.llm = llm
         self.publisher = publisher
         self.notifier = notifier
+        self.platforms = platforms or dict  # () -> {"youtube": client, "facebook": client}
+        self.tz = tz
 
     # ---------------------------------------------------------------- evidence: metrics
     def refresh_metrics(self, now: datetime | None = None) -> int:
-        """Fetch Instagram numbers for recently posted reels, about once a day each."""
         now = now or datetime.now(UTC)
+        return self._refresh_instagram(now) + self._refresh_crossposts(now)
+
+    def _refresh_crossposts(self, now: datetime) -> int:
+        """YouTube / Facebook numbers of recent cross-posts, about once a day each."""
+        have, n = self.db.platform_metrics(), 0
+        for platform, client in self.platforms().items():
+            if not hasattr(client, "stats"):
+                continue
+            for job in self.db.jobs_with_status(JobStatus.PUBLISHED, JobStatus.APPROVED):
+                post_id = self.db.kv_get(f"{platform}_id:{job['id']}")
+                at = released_at(self.db, job, platform)
+                if not post_id or not at or now - at > METRICS_FOR:
+                    continue
+                last = _parse_time((have.get((job["id"], platform)) or {}).get("fetched_at"))
+                if last and now - last < METRICS_EVERY:
+                    continue
+                try:
+                    data = client.stats(post_id)
+                except Exception as e:  # numbers are nice to have; never break a run over them
+                    log.warning("%s stats for #%s failed: %s", platform, job["id"], e)
+                    continue
+                if data:
+                    self.db.save_platform_metrics(job["id"], platform, post_id, data)
+                    n += 1
+        return n
+
+    def _refresh_instagram(self, now: datetime) -> int:
+        """Fetch Instagram numbers for recently posted reels, about once a day each."""
         if not hasattr(self.publisher, "insights"):
             return 0
         off = _parse_time(self.db.kv_get(INSIGHTS_OFF_KEY))
@@ -353,6 +436,8 @@ class Learner:
             lines.append(f"Best: {top.line()}")
         elif not reels:
             lines.append("No viewer numbers yet (they need the insights permission, and up to 48h).")
+        if days := day_report(self.db, self.tz):
+            lines.append("\n" + days)
         self.update_lessons()
         lines.append("\n📒 Lessons the next episodes follow:\n" + self.lessons_text())
         self.notifier.send_message("\n".join(lines)[:3900])

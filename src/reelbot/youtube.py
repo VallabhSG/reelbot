@@ -106,6 +106,20 @@ class YouTubePublisher:
         items = r.json().get("items") or []
         return items[0]["snippet"]["title"] if items else "(no channel on this account)"
 
+    def stats(self, video_id: str) -> dict[str, float]:
+        """Lifetime views / likes / comments of one Short (youtube.readonly)."""
+        r = self.http.get(
+            f"{API_URL}/videos", params={"part": "statistics", "id": video_id}, headers=self._auth()
+        )
+        _raise(r, "videos.list")
+        items = r.json().get("items") or []
+        st = items[0].get("statistics", {}) if items else {}
+        out = {
+            k: _num(st.get(src))
+            for k, src in (("views", "viewCount"), ("likes", "likeCount"), ("comments", "commentCount"))
+        }
+        return {k: v for k, v in out.items() if v is not None}
+
     @retry(
         retry=retry_if_exception(retryable),
         stop=stop_after_attempt(3),
@@ -161,6 +175,13 @@ class YouTubePublisher:
         return video_id
 
 
+def _num(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 class DryRunYouTube:
     def __init__(self) -> None:
         self.uploads: list[dict[str, Any]] = []
@@ -171,6 +192,9 @@ class DryRunYouTube:
 
     def channel_title(self) -> str:
         return "dry run"
+
+    def stats(self, video_id: str) -> dict[str, float]:
+        return {"views": float(300 + sum(map(ord, video_id)) % 900), "likes": 12.0, "comments": 2.0}
 
 
 def shorts_url(video_id: str) -> str:

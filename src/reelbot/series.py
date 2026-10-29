@@ -195,12 +195,21 @@ class Budget(BaseModel):
     per_reel_usd: float = 3.0
 
 
+Platform = Literal["instagram", "youtube", "facebook"]
+
+
 class Schedule(BaseModel):
     generate_at: str = "10:00"  # local time, HH:MM
     publish_at: str = "19:30"
     days: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(
         default_factory=lambda: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     )
+    # Spread each reel over several days, one platform per day from the approval slot:
+    # [instagram, youtube, facebook] = day 0, +1, +2. Empty = every platform at once.
+    stagger: list[Platform] = Field(default_factory=list)
+    # Shift that order every week so each platform gets to try every weekday (a 3-week cycle);
+    # the weekly report then shows which days each platform does best on.
+    rotate: bool = False
 
 
 class Series(BaseModel):

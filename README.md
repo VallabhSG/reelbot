@@ -194,6 +194,10 @@ Every reel teaches the next one:
   storyboard is written with the lessons plus the best- and worst-watched episodes so far.
   See them with `lessons` or `/lessons`; a note that changes them is answered with the new lesson.
 - **Weekly report** (Sunday evening, Telegram): views, % watched vs last week, best reel, lessons.
+- **Posting days.** `schedule.stagger` spreads each reel over the platforms, one a day from the
+  approval slot (2 reels a week cover 6 days). With `rotate: true` the order shifts weekly, so each
+  platform tries every weekday in 3 weeks; the weekly report and `stats` show average views per
+  posting day per platform, which tells you which 2 days to settle on.
 
 ## v2: how a reel is made
 

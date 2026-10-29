@@ -34,7 +34,7 @@ from zoneinfo import ZoneInfo
 
 from .config import get_settings
 from .factory import build
-from .learn import parse_note, posted
+from .learn import day_report, parse_note, posted
 from .models import JobStatus
 from .worker import Worker, publish_time_for_approval
 
@@ -84,6 +84,12 @@ def cmd_check(_: argparse.Namespace) -> int:
         f"  est. ${per_reel:.2f}/reel (first take) · ~${per_month:.2f}/month at {len(series.schedule.days)}/week"
         f" · cap ${series.budget.monthly_usd:.2f}/month, ${series.budget.per_reel_usd:.2f}/reel"
     )
+    sch = series.schedule
+    if sch.stagger:
+        print(
+            f"  release: one platform a day ({' -> '.join(sch.stagger)})"
+            + (", order rotates weekly" if sch.rotate else "")
+        )
     if series.characters:
         print(
             f"  cast sheets (one-time): ~${series.estimate_cast_cost():.2f} for "
@@ -185,8 +191,9 @@ def cmd_approve(a: argparse.Namespace) -> int:
     tz = ZoneInfo(app.settings.timezone)
     when = datetime.now(UTC) if a.now else publish_time_for_approval(app.series.schedule, datetime.now(tz))
     app.pipeline.approve(a.job, when, note=" ".join(a.note))
-    print(f"job {a.job} approved, publishes at {when.astimezone(tz):%Y-%m-%d %H:%M %Z}")
-    _tell(app, a.job, f"✅ #{a.job} approved, posting at {when.astimezone(tz):%a %H:%M}")
+    plan = app.pipeline.release_plan_text(a.job, tz)
+    print(f"job {a.job} approved: {plan}")
+    _tell(app, a.job, f"✅ #{a.job} approved: {plan}")
     if a.now:
         app.pipeline.publish_due()
     return 0
@@ -247,6 +254,10 @@ def cmd_stats(_: argparse.Namespace) -> int:
         print(
             "  none yet (posted reels need the instagram_business_manage_insights permission, and up to 48h)"
         )
+    for (jid, platform), m in sorted(app.db.platform_metrics().items()):
+        print(f"  #{jid} {platform}: {int(m['data'].get('views', 0)):,} views")
+    if days := day_report(app.db, ZoneInfo(app.settings.timezone)):
+        print(days)
     return 0
 
 

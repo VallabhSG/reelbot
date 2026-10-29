@@ -76,6 +76,25 @@ class FacebookPublisher:
     def page_name(self) -> str:
         return self._graph("GET", self.page_id, fields="name").get("name", "?")
 
+    def stats(self, video_id: str) -> dict[str, float]:
+        """Lifetime reel metrics from video_insights. Reels report plays under a few names depending
+        on the API version, so take the first one present."""
+        body = self._graph("GET", f"{video_id}/video_insights")
+        raw: dict[str, float] = {}
+        for item in body.get("data") or []:
+            values = item.get("values") or []
+            value = values[0].get("value") if values else None
+            if item.get("name") and isinstance(value, int | float):
+                raw[item["name"]] = float(value)
+        out: dict[str, float] = {}
+        for name in PLAY_METRICS:
+            if name in raw:
+                out["views"] = raw[name]
+                break
+        if "post_video_avg_time_watched" in raw:
+            out["avg_watch_ms"] = raw["post_video_avg_time_watched"]
+        return out
+
     @retry(
         retry=retry_if_exception(retryable),
         stop=stop_after_attempt(3),
@@ -141,6 +160,9 @@ class FacebookPublisher:
             time.sleep(self.poll_interval)
 
 
+PLAY_METRICS = ("blue_reels_play_count", "fb_reels_total_plays", "total_video_views")
+
+
 class DryRunFacebook:
     def __init__(self) -> None:
         self.posts: list[dict[str, Any]] = []
@@ -153,6 +175,9 @@ class DryRunFacebook:
 
     def page_name(self) -> str:
         return "dry run"
+
+    def stats(self, video_id: str) -> dict[str, float]:
+        return {"views": float(200 + sum(map(ord, video_id)) % 700)}
 
 
 def reel_url(video_id: str) -> str:

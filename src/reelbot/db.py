@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS feedback (
   text       TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS platform_metrics (
+  job_id     INTEGER NOT NULL,
+  platform   TEXT    NOT NULL,           -- youtube | facebook (Instagram lives in metrics)
+  post_id    TEXT    NOT NULL,
+  fetched_at TEXT    NOT NULL,
+  data_json  TEXT    NOT NULL,
+  PRIMARY KEY (job_id, platform)
+);
 CREATE TABLE IF NOT EXISTS metrics (
   job_id     INTEGER PRIMARY KEY,
   media_id   TEXT NOT NULL,
@@ -207,6 +215,23 @@ class DB:
         with self._conn() as c:
             rows = c.execute("SELECT job_id, fetched_at, data_json FROM metrics").fetchall()
         return {r[0]: {"fetched_at": r[1], "data": json.loads(r[2])} for r in rows}
+
+    def save_platform_metrics(self, job_id: int, platform: str, post_id: str, data: dict[str, float]) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO platform_metrics (job_id, platform, post_id, fetched_at, data_json) "
+                "VALUES (?,?,?,?,?) ON CONFLICT(job_id, platform) DO UPDATE SET post_id=excluded.post_id, "
+                "fetched_at=excluded.fetched_at, data_json=excluded.data_json",
+                (job_id, platform, post_id, _now(), json.dumps(data)),
+            )
+
+    def platform_metrics(self) -> dict[tuple[int, str], dict[str, Any]]:
+        """(job id, platform) -> {"fetched_at": iso, "data": {...}}"""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT job_id, platform, fetched_at, data_json FROM platform_metrics"
+            ).fetchall()
+        return {(r[0], r[1]): {"fetched_at": r[2], "data": json.loads(r[3])} for r in rows}
 
     def last_evidence_at(self) -> str:
         """When the newest feedback or metric arrived ('' if none): lessons older than this are stale."""

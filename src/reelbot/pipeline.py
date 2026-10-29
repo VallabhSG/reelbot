@@ -17,7 +17,7 @@ import json
 import logging
 import shutil
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -104,7 +104,9 @@ class Pipeline:
         self.publisher = publisher
         self.youtube = youtube  # None = YouTube Shorts off
         self.facebook = facebook  # None = Facebook Reels off
-        self.learner = Learner(db, series, planner.llm, publisher, notifier)
+        self.learner = Learner(
+            db, series, planner.llm, publisher, notifier, platforms=self.crosspost_platforms, tz=guard.tz
+        )
 
     # ================================================================== cast
     def cast_urls(self) -> dict[str, str]:
@@ -604,9 +606,36 @@ class Pipeline:
 
     def approve(self, job_id: int, publish_after: datetime | None = None, note: str = "") -> None:
         self._require(job_id, JobStatus.AWAITING_REVIEW)
-        when = (publish_after or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
+        base = (publish_after or datetime.now(UTC)).astimezone(UTC)
+        when = base.isoformat(timespec="seconds")
         self.db.update_job(job_id, status=JobStatus.APPROVED, publish_after=when)
+        self.db.kv_set(f"slots:{job_id}", json.dumps(self.release_slots(base)))
         self.db.add_feedback(job_id, "approved", note)
+
+    # ---- when each platform gets the reel (schedule.stagger / rotate)
+    def release_slots(self, base: datetime) -> dict[str, str]:
+        enabled = ["instagram", *self.crosspost_platforms()]
+        sched = self.s.schedule
+        order = [p for p in sched.stagger if p in enabled]
+        if sched.rotate and len(order) > 1:
+            k = base.isocalendar().week % len(order)
+            order = order[k:] + order[:k]
+        offsets = {p: i for i, p in enumerate(order)}
+        return {
+            p: (base + timedelta(days=offsets.get(p, 0))).astimezone(UTC).isoformat(timespec="seconds")
+            for p in enabled
+        }
+
+    def slots(self, job_id: int) -> dict[str, str] | None:
+        """Per-platform release times, or None for reels approved before staggering existed."""
+        raw = self.db.kv_get(f"slots:{job_id}")
+        return json.loads(raw) if raw else None
+
+    def release_plan_text(self, job_id: int, tz: Any) -> str:
+        slots = self.slots(job_id) or {}
+        names = {"instagram": "Instagram", **CROSSPOST_NAMES}
+        parts = sorted(slots.items(), key=lambda kv: kv[1])
+        return " · ".join(f"{names[p]} {datetime.fromisoformat(t).astimezone(tz):%a %H:%M}" for p, t in parts)
 
     def reject(self, job_id: int, note: str = "") -> None:
         job = self._require(job_id, JobStatus.AWAITING_REVIEW, JobStatus.APPROVED, JobStatus.FAILED)
@@ -769,7 +798,7 @@ class Pipeline:
         self.db.update_job(job_id, status=JobStatus.PUBLISHED, ig_media_id=media_id)
         link = self.publisher.permalink(media_id) or media_id
         self.notifier.send_message(f"🚀 #{job_id} is live: {link}")
-        self.cross_post(job_id)
+        self.cross_post(job_id, after_publish=True)
         return media_id
 
     # ---- cross-posting: the same reel on YouTube Shorts / Facebook right after Instagram. A failure
@@ -844,11 +873,25 @@ class Pipeline:
         self.notifier.send_message(link)
         return post_id
 
-    def cross_post(self, job_id: int) -> dict[str, str]:
-        out = {}
-        for platform in self.crosspost_platforms():
-            if self.db.kv_get(f"{platform}_id:{job_id}"):
+    def due_platforms(self, job_id: int, now: datetime, after_publish: bool = False) -> list[str]:
+        slots, now_iso = self.slots(job_id), now.astimezone(UTC).isoformat(timespec="seconds")
+        out = []
+        for p in self.crosspost_platforms():
+            tries = int(self.db.kv_get(f"{p}_tries:{job_id}") or 0)
+            if self.db.kv_get(f"{p}_id:{job_id}") or tries >= CROSSPOST_TRIES:
                 continue
+            # approved before staggering existed: right after Instagram, then only retries (so a reel
+            # from before a platform was set up is never back-posted on its own)
+            due = slots.get(p, slots.get("instagram", "")) <= now_iso if slots else after_publish or tries > 0
+            if due:
+                out.append(p)
+        return out
+
+    def cross_post(
+        self, job_id: int, now: datetime | None = None, after_publish: bool = False
+    ) -> dict[str, str]:
+        out = {}
+        for platform in self.due_platforms(job_id, now or datetime.now(UTC), after_publish):
             tries = int(self.db.kv_get(f"{platform}_tries:{job_id}") or 0) + 1
             self.db.kv_set(f"{platform}_tries:{job_id}", str(tries))
             try:
@@ -861,22 +904,22 @@ class Pipeline:
         return out
 
     def publish_due(self, now: datetime | None = None) -> list[str]:
-        now_iso = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
+        now = (now or datetime.now(UTC)).astimezone(UTC)
+        now_iso = now.isoformat(timespec="seconds")
         published = []
         for job in self.db.jobs_with_status(JobStatus.APPROVED):
-            if (job["publish_after"] or "") <= now_iso:
+            slots = self.slots(job["id"])
+            ig_at = (
+                slots.get("instagram", job["publish_after"] or "") if slots else job["publish_after"] or ""
+            )
+            if ig_at <= now_iso:
                 try:
                     published.append(self.publish(job["id"]))
                 except Exception:
                     log.exception("publish failed for job %s", job["id"])
-        for job in self.db.jobs_with_status(JobStatus.PUBLISHED):  # cross-posts that failed earlier
-            retry = [
-                p
-                for p in self.crosspost_platforms()
-                # reels posted before a platform was set up have 0 tries: never back-posted on their own
-                if 0 < int(self.db.kv_get(f"{p}_tries:{job['id']}") or 0) < CROSSPOST_TRIES
-                and not self.db.kv_get(f"{p}_id:{job['id']}")
-            ]
-            if retry:
-                self.cross_post(job["id"])
+            elif slots:  # a platform whose day comes before Instagram's this week
+                self.cross_post(job["id"], now)
+        for job in self.db.jobs_with_status(JobStatus.PUBLISHED):  # later days + earlier failures
+            if self.due_platforms(job["id"], now):
+                self.cross_post(job["id"], now)
         return published
