@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -64,7 +65,23 @@ CROSSPOST_OFF = {
     "youtube": "YouTube is off: set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN",
     "facebook": "Facebook is off: set FB_PAGE_ID and FB_PAGE_TOKEN",
 }
-IG_HASHTAG_MAX = 30
+IG_HASHTAG_MAX = 5  # Instagram's cap since Dec 2025; tags past it are dropped or hurt distribution
+HASHTAG_RE = re.compile(r"(?<![\w&])#\w+")
+
+
+def limit_hashtags(text: str, n: int = IG_HASHTAG_MAX) -> str:
+    """Keep the first n hashtags, drop the rest (captions written before the cap had more)."""
+    seen = 0
+
+    def keep(m: re.Match[str]) -> str:
+        nonlocal seen
+        seen += 1
+        return m.group(0) if seen <= n else ""
+
+    out = HASHTAG_RE.sub(keep, text)
+    return "\n".join(
+        " ".join(ln.split()) if "#" in ln or not ln.strip() else ln for ln in out.splitlines()
+    ).strip()
 
 
 class CastNotReady(RuntimeError):
@@ -787,7 +804,7 @@ class Pipeline:
             if (cover := self.db.kv_get(f"cover:{job_id}")) and Path(cover).exists():
                 _, cover_url = self.storage.put_public(Path(cover), f"reels/{job_id}")
             media_id = self.publisher.publish_reel(
-                url, job["caption"], self.s.title_card.cover_offset_ms, cover_url=cover_url
+                url, limit_hashtags(job["caption"]), self.s.title_card.cover_offset_ms, cover_url=cover_url
             )
         except Exception as e:
             self.db.update_job(

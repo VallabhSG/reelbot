@@ -115,4 +115,15 @@ def test_caption_shape_and_limits(dry_settings, series):
     )
     cap = p.caption(plan, 7)
     assert cap.splitlines()[:3] == ["NIGHT SHIFT", "Night 7 / 100", "🚇 Metro night driver"]
-    assert cap.count("#t") == 30 and "\n\n\n" not in cap
+    assert cap.count("#t") == 5 and "\n\n\n" not in cap  # Instagram caps hashtags at 5
+
+
+def test_captions_keep_only_five_hashtags():
+    from reelbot.pipeline import limit_hashtags
+
+    cap = "BOSS 1 / 100\n\nThe doors always wait.\n\nAnimated with Kling\n\n#a #b #c #d #e #f #g"
+    out = limit_hashtags(cap)
+    assert out.endswith("#a #b #c #d #e") and "#f" not in out
+    assert "The doors always wait." in out and "\n\n" in out
+    assert limit_hashtags("no tags here") == "no tags here"
+    assert limit_hashtags("caf&#233; #one") == "caf&#233; #one"
