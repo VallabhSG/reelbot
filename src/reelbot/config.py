@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_refresh_token: str = ""
 
+    # --- Facebook Reels (optional: the same reel goes to a Facebook Page; see README) ---
+    fb_page_id: str = ""
+    fb_page_token: str = ""  # a Page token made from a long-lived user token never expires
+    fb_graph_version: str = "v26.0"
+
     @model_validator(mode="after")
     def _split_hf_key(self) -> Settings:
         key = self.hf_api_key.strip()
@@ -77,6 +82,10 @@ class Settings(BaseSettings):
     @property
     def youtube_enabled(self) -> bool:
         return bool(self.youtube_client_id and self.youtube_client_secret and self.youtube_refresh_token)
+
+    @property
+    def facebook_enabled(self) -> bool:
+        return bool(self.fb_page_id and self.fb_page_token)
 
     @property
     def db_path(self) -> Path:

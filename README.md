@@ -82,6 +82,21 @@ to 3 minutes is a Short). Uploading through the API costs nothing.
 6. Add `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` to `.env` / ENV_FILE.
    `reelbot smoke` shows the channel name. `reelbot youtube ID` posts a reel that went out before.
 
+### Facebook Reels (optional, free)
+
+The same reel also goes to a Facebook Page right after Instagram (Facebook pays Pages for reels
+once they qualify for Content Monetization; uploading the clean file avoids the "repost" flag).
+
+1. Create a Facebook Page for the series.
+2. In your Meta app (developers.facebook.com → the app) add the use case **Manage everything on
+   your Page**, with `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`.
+3. Graph API Explorer → your app → *Get User Access Token* with those three permissions → pick the
+   Page. ⓘ next to the token → *Open in Access Token Tool* → **Extend Access Token** → copy it.
+4. Back in the Explorer, paste the long-lived token and run `GET me/accounts`: copy your Page's
+   `id` and `access_token`. (The Access Token Debugger shows that Page token as "Expires: Never".)
+5. Add `FB_PAGE_ID` and `FB_PAGE_TOKEN` to `.env` / ENV_FILE. `reelbot smoke` shows the Page name;
+   `reelbot facebook ID` posts a reel that went out before.
+
 ## Deploy
 
 **GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` every 30 min

@@ -11,7 +11,7 @@ on:
       command:
         description: "reelbot command"
         type: choice
-        options: [tick, make, approve, reject, note, lessons, stats, youtube, retake, bakeoff, cast, pick, regen, status, smoke, check]
+        options: [tick, make, approve, reject, note, lessons, stats, youtube, facebook, retake, bakeoff, cast, pick, regen, status, smoke, check]
         default: tick
       args:
         description: "arguments, e.g. approve: 7 · reject: 7 the payoff made no sense · note: 7 opening too static · lessons: --update · approve: 2 --now · pick: Juno 3 Mochi 1"

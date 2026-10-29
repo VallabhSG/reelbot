@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .budget import BudgetGuard
 from .config import Settings
 from .db import DB
+from .facebook import DryRunFacebook, FacebookPublisher
 from .instagram import DryRunPublisher, InstagramPublisher
 from .pipeline import Pipeline
 from .planner import Planner
@@ -42,6 +43,7 @@ def build(settings: Settings, series: Series | None = None) -> App:
         storage = LocalStorage()
         publisher = DryRunPublisher()
         youtube = DryRunYouTube()
+        facebook = DryRunFacebook()
     else:
         llm = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
         media = HiggsfieldMedia(
@@ -72,6 +74,11 @@ def build(settings: Settings, series: Series | None = None) -> App:
             if settings.youtube_enabled
             else None
         )
+        facebook = (
+            FacebookPublisher(settings.fb_page_id, settings.fb_page_token, settings.fb_graph_version)
+            if settings.facebook_enabled
+            else None
+        )
 
     pipeline = Pipeline(
         series=series,
@@ -85,5 +92,6 @@ def build(settings: Settings, series: Series | None = None) -> App:
         storage=storage,
         publisher=publisher,
         youtube=youtube if series.youtube.enabled else None,
+        facebook=facebook if series.facebook.enabled else None,
     )
     return App(settings, series, db, guard, pipeline)

@@ -35,6 +35,7 @@ from .assemble import (
 )
 from .budget import BudgetExceeded, BudgetGuard
 from .db import DB
+from .facebook import reel_url
 from .learn import Learner, planner_guidance
 from .models import EpisodePlan, JobStatus
 from .planner import Planner
@@ -57,7 +58,12 @@ from .youtube import shorts_url
 log = logging.getLogger(__name__)
 
 IG_CAPTION_MAX = 2200
-YOUTUBE_TRIES = 3
+CROSSPOST_TRIES = 3
+CROSSPOST_NAMES = {"youtube": "YouTube", "facebook": "Facebook"}
+CROSSPOST_OFF = {
+    "youtube": "YouTube is off: set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN",
+    "facebook": "Facebook is off: set FB_PAGE_ID and FB_PAGE_TOKEN",
+}
 IG_HASHTAG_MAX = 30
 
 
@@ -84,6 +90,7 @@ class Pipeline:
         storage: Storage,
         publisher: Any,
         youtube: Any = None,
+        facebook: Any = None,
     ):
         self.s = series
         self.db = db
@@ -96,6 +103,7 @@ class Pipeline:
         self.storage = storage
         self.publisher = publisher
         self.youtube = youtube  # None = YouTube Shorts off
+        self.facebook = facebook  # None = Facebook Reels off
         self.learner = Learner(db, series, planner.llm, publisher, notifier)
 
     # ================================================================== cast
@@ -761,16 +769,21 @@ class Pipeline:
         self.db.update_job(job_id, status=JobStatus.PUBLISHED, ig_media_id=media_id)
         link = self.publisher.permalink(media_id) or media_id
         self.notifier.send_message(f"🚀 #{job_id} is live: {link}")
-        self.post_youtube_safely(job_id)
+        self.cross_post(job_id)
         return media_id
 
-    # ---- YouTube Shorts: the same reel, right after Instagram; a failure never touches the IG post
-    def youtube_meta(self, job_id: int) -> tuple[str, str, list[str]]:
+    # ---- cross-posting: the same reel on YouTube Shorts / Facebook right after Instagram. A failure
+    # never touches the Instagram post; later runs retry each platform up to CROSSPOST_TRIES times.
+    def crosspost_platforms(self) -> dict[str, Any]:
+        pairs = (("youtube", self.youtube), ("facebook", self.facebook))
+        return {name: client for name, client in pairs if client is not None}
+
+    def _meta_values(self, job_id: int) -> dict[str, Any]:
         job = self.db.get_job(job_id)
         plan = self.db.plan(job_id)
-        yt, cap = self.s.youtube, self.s.caption
+        cap = self.s.caption
         model = self.model_label(self.take_model_for(job_id)) if self.s.take.enabled else ""
-        values = {
+        return {
             "hook_line": plan.hook.strip().splitlines()[0].strip() if plan.hook.strip() else plan.title,
             "hook": plan.hook.strip(),
             "title": plan.title,
@@ -781,52 +794,71 @@ class Pipeline:
             "credits": cap.credits.strip().replace("{model}", model or "Kling"),
             "hashtags": " ".join(cap.hashtags[:3]),  # YouTube shows the first 3 above the title
         }
+
+    def youtube_meta(self, job_id: int) -> tuple[str, str, list[str]]:
+        values, yt = self._meta_values(job_id), self.s.youtube
         title = " ".join(yt.title.format(**values).split())
         description = yt.description.format(**values).strip()
-        return title, description, [*cap.hashtags, self.s.series.name]
+        return title, description, [*self.s.caption.hashtags, self.s.series.name]
 
-    def post_youtube(self, job_id: int) -> str:
-        if self.youtube is None:
-            raise ValueError(
-                "YouTube is off: set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN"
-            )
-        if done := self.db.kv_get(f"youtube_id:{job_id}"):
-            return done
+    def _video_file(self, job_id: int) -> Path:
         job = self.db.get_job(job_id)
         if not job:
             raise KeyError(f"job {job_id} not found")
         path = Path(job["video_path"] or "")
-        if not path.exists():  # a later run: fetch the public copy Instagram was given
-            if not job["public_url"]:
-                raise ValueError(f"job {job_id} has no video to upload")
-            path = download(job["public_url"], self._dir(job_id) / "youtube.mp4")
-        title, description, tags = self.youtube_meta(job_id)
-        yt = self.s.youtube
-        video_id = self.youtube.upload_short(
-            path,
-            title,
-            description,
-            tags,
-            category_id=yt.category_id,
-            made_for_kids=yt.made_for_kids,
-            synthetic_media=yt.synthetic_media,
-        )
-        self.db.kv_set(f"youtube_id:{job_id}", video_id)
-        self.notifier.send_message(f"▶️ #{job_id} is on YouTube Shorts: {shorts_url(video_id)}")
-        return video_id
+        if path.exists():
+            return path
+        if not job["public_url"]:  # a later run: fetch the public copy Instagram was given
+            raise ValueError(f"job {job_id} has no video to upload")
+        dest = self._dir(job_id) / "crosspost.mp4"
+        return dest if dest.exists() else download(job["public_url"], dest)
 
-    def post_youtube_safely(self, job_id: int) -> str | None:
-        if self.youtube is None or self.db.kv_get(f"youtube_id:{job_id}"):
-            return None
-        tries = int(self.db.kv_get(f"youtube_tries:{job_id}") or 0) + 1
-        self.db.kv_set(f"youtube_tries:{job_id}", str(tries))
-        try:
-            return self.post_youtube(job_id)
-        except Exception as e:
-            log.exception("youtube upload of #%s failed", job_id)
-            more = " Trying again on the next runs." if tries < YOUTUBE_TRIES else ""
-            self.notifier.send_message(f"⚠️ YouTube upload of #{job_id} failed: {e}"[:900] + more)
-            return None
+    def post_to(self, platform: str, job_id: int) -> str:
+        client = self.crosspost_platforms().get(platform)
+        if client is None:
+            raise ValueError(CROSSPOST_OFF.get(platform, f"unknown platform {platform!r}"))
+        if done := self.db.kv_get(f"{platform}_id:{job_id}"):
+            return done
+        path = self._video_file(job_id)
+        if platform == "youtube":
+            title, description, tags = self.youtube_meta(job_id)
+            yt = self.s.youtube
+            post_id = client.upload_short(
+                path,
+                title,
+                description,
+                tags,
+                category_id=yt.category_id,
+                made_for_kids=yt.made_for_kids,
+                synthetic_media=yt.synthetic_media,
+            )
+            link = f"▶️ #{job_id} is on YouTube Shorts: {shorts_url(post_id)}"
+        else:
+            fb = self.s.facebook
+            title = " ".join(fb.title.format(**self._meta_values(job_id)).split())
+            post_id = client.publish_reel(
+                path, self.db.get_job(job_id)["caption"] or title, title=title, ai_generated=fb.ai_label
+            )
+            link = f"📘 #{job_id} is on Facebook: {reel_url(post_id)}"
+        self.db.kv_set(f"{platform}_id:{job_id}", post_id)
+        self.notifier.send_message(link)
+        return post_id
+
+    def cross_post(self, job_id: int) -> dict[str, str]:
+        out = {}
+        for platform in self.crosspost_platforms():
+            if self.db.kv_get(f"{platform}_id:{job_id}"):
+                continue
+            tries = int(self.db.kv_get(f"{platform}_tries:{job_id}") or 0) + 1
+            self.db.kv_set(f"{platform}_tries:{job_id}", str(tries))
+            try:
+                out[platform] = self.post_to(platform, job_id)
+            except Exception as e:
+                log.exception("%s upload of #%s failed", platform, job_id)
+                more = " Trying again on the next runs." if tries < CROSSPOST_TRIES else ""
+                name = CROSSPOST_NAMES[platform]
+                self.notifier.send_message(f"⚠️ {name} upload of #{job_id} failed: {e}"[:900] + more)
+        return out
 
     def publish_due(self, now: datetime | None = None) -> list[str]:
         now_iso = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
@@ -837,9 +869,14 @@ class Pipeline:
                     published.append(self.publish(job["id"]))
                 except Exception:
                     log.exception("publish failed for job %s", job["id"])
-        if self.youtube is not None:  # Shorts that failed earlier (a quota blip, an expired token)
-            for job in self.db.jobs_with_status(JobStatus.PUBLISHED):
-                tries = int(self.db.kv_get(f"youtube_tries:{job['id']}") or 0)
-                if 0 < tries < YOUTUBE_TRIES:  # reels posted before YouTube was set up have 0 tries
-                    self.post_youtube_safely(job["id"])
+        for job in self.db.jobs_with_status(JobStatus.PUBLISHED):  # cross-posts that failed earlier
+            retry = [
+                p
+                for p in self.crosspost_platforms()
+                # reels posted before a platform was set up have 0 tries: never back-posted on their own
+                if 0 < int(self.db.kv_get(f"{p}_tries:{job['id']}") or 0) < CROSSPOST_TRIES
+                and not self.db.kv_get(f"{p}_id:{job['id']}")
+            ]
+            if retry:
+                self.cross_post(job["id"])
         return published

@@ -157,5 +157,15 @@ def run_smoke(s: Settings) -> int:
 
         results.append(_try("YouTube", youtube))
 
+    if s.facebook_enabled:
+
+        def facebook() -> str:
+            from .facebook import FacebookPublisher
+
+            fb = FacebookPublisher(s.fb_page_id, s.fb_page_token, s.fb_graph_version)
+            return f"Page '{fb.page_name()}' (reels go here)"
+
+        results.append(_try("Facebook", facebook))
+
     print(f"\n{sum(results)}/{len(results)} checks passed · month spend ${guard.month_spend():.4f}")
     return 0 if all(results) else 1

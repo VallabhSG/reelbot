@@ -179,6 +179,17 @@ class YouTubeSpec(BaseModel):
     synthetic_media: bool = False
 
 
+class FacebookSpec(BaseModel):
+    """Facebook Reels: the same reel on a Facebook Page, posted right after Instagram once FB_PAGE_ID
+    and FB_PAGE_TOKEN exist. The description is the Instagram caption; title placeholders as YouTube."""
+
+    enabled: bool = True
+    title: str = "{hook_line} {emoji}"
+    # Meta's "AI info" label. Required for photorealistic AI video; optional for animation (the
+    # caption already says #aianimation). Set true to label every reel anyway.
+    ai_label: bool = False
+
+
 class Budget(BaseModel):
     monthly_usd: float = 40.0
     per_reel_usd: float = 3.0
@@ -208,6 +219,7 @@ class Series(BaseModel):
     title_card: TitleCard = TitleCard()
     caption: CaptionSpec = CaptionSpec()
     youtube: YouTubeSpec = YouTubeSpec()
+    facebook: FacebookSpec = FacebookSpec()
     budget: Budget = Budget()
     schedule: Schedule = Schedule()
 
