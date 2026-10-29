@@ -313,14 +313,13 @@ caption:
   # Instagram allows 5 since Dec 2025 (1-2 broad, 1-2 medium, 1 niche); keywords in the caption
   # matter more for search now
   hashtags: ["#anime", "#relatable", "#aianimation", "#aishortfilm", "#bossfight"]
-  # Affiliate links: every post carries one labelled line per link, just above the hashtags
-  # ("link in bio" on Instagram, so put both links in the bio; the link itself on YouTube/Facebook).
+  # Affiliate links: every post carries one labelled line per link, just above the hashtags, on
+  # Instagram too (not clickable there, but copyable). To point Instagram to the bio instead, add
+  # e.g.  instagram: "🎬 Made with Higgsfield · affiliate link in bio"
   affiliates:
     - url: "https://higgsfield.ai?fpr=vallabh-8bf470"
-      instagram: "🎬 Made with Higgsfield · affiliate link in bio"
       link_text: "🎬 Made with Higgsfield (affiliate link): {url}"
     - url: "https://try.elevenlabs.io/8k8afoea9y48"
-      instagram: "🎵 Music by ElevenLabs · affiliate link in bio"
       link_text: "🎵 Music by ElevenLabs (affiliate link): {url}"
 
 budget:

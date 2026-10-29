@@ -159,12 +159,13 @@ class TitleCard(BaseModel):
 
 
 class Affiliate(BaseModel):
-    """One affiliate link, always labelled as one. Instagram captions can't hold a clickable link,
-    so Instagram gets `instagram` (pointing to the bio); YouTube and Facebook get `link_text`."""
+    """One affiliate link, always labelled as one. `link_text` goes on every platform ("{url}" is
+    replaced by the link). Instagram doesn't make caption links clickable, so `instagram` can give
+    it a different line instead (e.g. "affiliate link in bio"); unset = the same line as elsewhere."""
 
     url: str
-    instagram: str
-    link_text: str = "{url}"  # "{url}" is replaced by the link
+    link_text: str = "{url}"
+    instagram: str | None = None
 
 
 class CaptionSpec(BaseModel):
@@ -177,7 +178,7 @@ class CaptionSpec(BaseModel):
 
     def affiliate_lines(self, platform: str) -> list[str]:
         return [
-            a.instagram if platform == "instagram" else a.link_text.format(url=a.url)
+            (a.instagram if platform == "instagram" and a.instagram else a.link_text).format(url=a.url)
             for a in self.affiliates
             if a.url
         ]

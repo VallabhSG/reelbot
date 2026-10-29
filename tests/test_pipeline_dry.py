@@ -162,8 +162,9 @@ def test_affiliate_line_sits_above_the_hashtags_on_every_platform(dry_settings, 
     assert limit_hashtags(ig).count("#") == 2  # the links never eat the hashtag allowance
 
 
-def test_series_file_carries_both_affiliate_links():
+def test_series_file_carries_both_affiliate_links_on_every_platform():
     cap = load_series(Path(__file__).parents[1] / "series" / "everyday-boss-fights.yaml").caption
     lines = cap.affiliate_lines("youtube")
     assert any("higgsfield.ai" in x for x in lines) and any("elevenlabs.io" in x for x in lines)
-    assert all("affiliate link" in x for x in [*lines, *cap.affiliate_lines("instagram")])
+    assert all("(affiliate link): https://" in x for x in lines)
+    assert cap.affiliate_lines("instagram") == lines  # the links themselves, not "in bio"
