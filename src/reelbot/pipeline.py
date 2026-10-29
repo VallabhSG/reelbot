@@ -63,6 +63,11 @@ class CastNotReady(RuntimeError):
     pass
 
 
+def spoken_seconds(line: str) -> float:
+    """How long a line takes to say, with slack for the model starting it a beat late."""
+    return 1.0 + 0.4 * len(line.split())
+
+
 class Pipeline:
     def __init__(
         self,
@@ -467,8 +472,12 @@ class Pipeline:
             impacts = [(a, a + IMPACT_FRAMES / FPS)]
             speed_lines = render_speed_lines(self._dir(job_id) / "speed_lines.png")
         # shots with a spoken line: the model's own audio comes up, the music ducks, subtitles show
+        # the music ducks only while the words are spoken (not the whole shot), so a short punchline
+        # like "...How?" doesn't leave the payoff in near-silence
         speech = [
-            (float(t0), float(t0 + s.seconds)) for s, t0 in zip(plan.shots, starts, strict=True) if s.line
+            (float(t0), float(min(t0 + s.seconds, t0 + spoken_seconds(s.line))))
+            for s, t0 in zip(plan.shots, starts, strict=True)
+            if s.line
         ]
         subs = []
         if t.subtitles:

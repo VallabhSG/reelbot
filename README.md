@@ -129,7 +129,10 @@ and audio analysis of their reels, dyyhoang's published Seedance prompts, his Ai
      sectioned prompt in the same layout as their published prompts.
 5. **Edit:** music-led mix over the model's own sound effects, music drops before the climax and
    slams back, a flash frame plus a black-and-white anime impact frame (speed lines) on the climax
-   cut, one quiet beat before the twist, yellow anime subtitles, -14 LUFS.
+   cut, one quiet beat before the twist, yellow anime subtitles, -14 LUFS. The music ducks only
+   while a line is actually spoken and stays up to the last frame (the top reels never fade out
+   their payoff; their cuts follow the action, not the beat, and the music's big lift lands on the
+   story's turn).
 6. **Craft details from the top reels** (INK: 435K, 238K and 14K likes, studied frame by frame):
    open on motion or a question-asking detail, never a static wide; spoken set-up as shot /
    reverse shot, phone calls as a split screen; the irony cut ("Don't worry" -> smash cut to the

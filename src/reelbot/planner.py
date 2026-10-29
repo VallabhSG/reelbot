@@ -149,7 +149,8 @@ STORYBOARD RULES
 - Beats in order, each at least once, never going backwards: {beats}.
   hook = an instantly readable situation with stakes in the first second. Shot 1 starts ON MOTION
   or on a detail that asks a question (feet stepping out of a doorway, a hand grabbing keys, a
-  phone lighting up, a clock at 6:59). Never open on a static wide of someone just standing;
+  phone lighting up at 2%, a clock at 6:59, a red F on a test). Never open on a static wide of
+  someone just standing;
   escalate = the character commits, tension rises;
   clash = the big dynamic action, energy, motion;
   climax = the decisive instant (slow motion or extreme close-up);

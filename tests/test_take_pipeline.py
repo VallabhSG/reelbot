@@ -274,3 +274,22 @@ def test_impact_frame_goes_black_and_white_under_speed_lines_and_keeps_subtitles
     assert colourful(impact) < 50  # black & white
     assert sum(min(px) > 230 for px in pixels(impact)) > 100  # white speed lines across the frame
     assert colourful(frame(3.0)) > 500  # and back to colour
+
+
+@needs_ffmpeg
+def test_music_ducks_only_while_the_words_are_spoken(dry_settings, take_series, monkeypatch):
+    from reelbot import pipeline as pl
+
+    take_series.take.dialogue = "bookends"
+    app = _app(dry_settings, take_series)
+    seen = []
+    real = pl.assemble_take
+    monkeypatch.setattr(pl, "assemble_take", lambda p: (seen.append(p), real(p))[1])
+    job = app.pipeline.plan_next()
+    app.pipeline.generate(job)
+    plan = app.db.plan(job)
+    last = plan.shots[-1]
+    a, b = seen[-1].speech[-1]
+    assert b - a == pytest.approx(pl.spoken_seconds(last.line))  # "Wrong train." ~1.8 s
+    assert b - a < last.seconds  # the rest of the payoff shot keeps its music
+    assert seen[-1].impacts and seen[-1].speed_lines.exists()

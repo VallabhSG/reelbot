@@ -243,7 +243,7 @@ def build_take_command(p: TakeAssembly, sfx: bool) -> list[str]:
     for k, (_, a, b) in enumerate(p.subtitles):
         parts.append(f"[v{k}][{k + 2}:v]overlay=0:0:enable='{_between(a, b)}'[v{k + 1}]")
     parts.append(f"[v{len(p.subtitles)}]format=yuv420p[vout]")
-    fade_out = min(1.2, total / 5)
+    fade_out = min(0.6, total / 10)  # the top reels end with the music still up, not a long fade
     music = (
         f"[1:a]atrim=0:{total},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,"
         f"afade=t=in:d=0.2,afade=t=out:st={total - fade_out:.3f}:d={fade_out:.3f},"
