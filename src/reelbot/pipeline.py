@@ -845,20 +845,15 @@ class Pipeline:
         }
 
     def with_affiliate(self, text: str, platform: str) -> str:
-        """Add the affiliate line just above the hashtags (labelled as an affiliate link)."""
-        cap = self.s.caption
-        if not cap.affiliate_url:
+        """Add the affiliate lines just above the hashtags (each labelled as an affiliate link)."""
+        add = [a for a in self.s.caption.affiliate_lines(platform) if a and a not in text]
+        if not add:
             return text
-        if platform == "instagram":
-            line = cap.affiliate_instagram
-        else:
-            line = cap.affiliate_link_text.format(url=cap.affiliate_url)
-        if not line or line in text:
-            return text
+        block = "\n".join(add)
         lines = text.rstrip().splitlines()
         if lines and lines[-1].lstrip().startswith("#"):
-            return "\n".join(lines[:-1]).rstrip() + f"\n\n{line}\n\n" + lines[-1]
-        return text.rstrip() + f"\n\n{line}"
+            return "\n".join(lines[:-1]).rstrip() + f"\n\n{block}\n\n" + lines[-1]
+        return text.rstrip() + f"\n\n{block}"
 
     def youtube_meta(self, job_id: int) -> tuple[str, str, list[str]]:
         values, yt = self._meta_values(job_id), self.s.youtube

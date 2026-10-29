@@ -158,16 +158,29 @@ class TitleCard(BaseModel):
     cover_offset_ms: int = 1200  # fallback cover frame if no poster cover is used
 
 
+class Affiliate(BaseModel):
+    """One affiliate link, always labelled as one. Instagram captions can't hold a clickable link,
+    so Instagram gets `instagram` (pointing to the bio); YouTube and Facebook get `link_text`."""
+
+    url: str
+    instagram: str
+    link_text: str = "{url}"  # "{url}" is replaced by the link
+
+
 class CaptionSpec(BaseModel):
     template: str = "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
     credits: str = ""
     hashtags: list[str] = Field(default_factory=list)
-    # Affiliate link (e.g. your Higgsfield one). Empty = nothing is added. Instagram captions can't
-    # hold a clickable link, so they point to the bio; YouTube and Facebook get the link itself.
-    # Added when a reel is posted, so reels planned earlier get it too.
-    affiliate_url: str = ""
-    affiliate_instagram: str = "🎬 Made with Higgsfield · affiliate link in bio"
-    affiliate_link_text: str = "🎬 Made with Higgsfield (affiliate link): {url}"
+    # Affiliate links, one line each, added just above the hashtags when a reel is posted (so reels
+    # planned earlier get them too). Empty = nothing is added.
+    affiliates: list[Affiliate] = Field(default_factory=list)
+
+    def affiliate_lines(self, platform: str) -> list[str]:
+        return [
+            a.instagram if platform == "instagram" else a.link_text.format(url=a.url)
+            for a in self.affiliates
+            if a.url
+        ]
 
 
 class YouTubeSpec(BaseModel):

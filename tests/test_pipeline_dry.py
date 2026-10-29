@@ -9,7 +9,8 @@ from PIL import Image
 from reelbot.assemble import probe_duration
 from reelbot.factory import build
 from reelbot.models import JobStatus
-from reelbot.pipeline import CastNotReady
+from reelbot.pipeline import CastNotReady, limit_hashtags
+from reelbot.series import Affiliate, load_series
 
 from .conftest import needs_ffmpeg
 
@@ -132,11 +133,37 @@ def test_captions_keep_only_five_hashtags():
 def test_affiliate_line_sits_above_the_hashtags_on_every_platform(dry_settings, series):
     p = build(dry_settings, series).pipeline
     cap = "Ep 1\n\nThe doors always wait.\n\nAnimated with Kling\n\n#anime #aianimation"
+    series.caption.affiliates = []
     assert p.with_affiliate(cap, "instagram") == cap  # no link set: nothing added
-    series.caption.affiliate_url = "https://higgsfield.ai/?ref=val"
+    series.caption.affiliates = [
+        Affiliate(
+            url="https://higgsfield.ai/?ref=val",
+            instagram="🎬 Higgsfield · affiliate link in bio",
+            link_text="🎬 Higgsfield (affiliate link): {url}",
+        ),
+        Affiliate(
+            url="https://try.elevenlabs.io/x",
+            instagram="🎵 ElevenLabs · affiliate link in bio",
+            link_text="🎵 ElevenLabs (affiliate link): {url}",
+        ),
+    ]
     ig = p.with_affiliate(cap, "instagram")
-    assert ig.endswith("affiliate link in bio\n\n#anime #aianimation") and "https://" not in ig
+    assert ig.endswith(
+        "Kling\n\n🎬 Higgsfield · affiliate link in bio\n🎵 ElevenLabs · affiliate link in bio\n\n#anime #aianimation"
+    )
+    assert "https://" not in ig
     yt = p.with_affiliate(cap, "youtube")
-    assert "(affiliate link): https://higgsfield.ai/?ref=val\n\n#anime" in yt
+    assert (
+        "(affiliate link): https://higgsfield.ai/?ref=val\n🎵 ElevenLabs (affiliate link): https://try.elevenlabs.io/x\n\n#anime"
+        in yt
+    )
     assert p.with_affiliate(yt, "youtube") == yt  # never twice
-    assert p.with_affiliate("no tags", "facebook").endswith("https://higgsfield.ai/?ref=val")
+    assert p.with_affiliate("no tags", "facebook").endswith("https://try.elevenlabs.io/x")
+    assert limit_hashtags(ig).count("#") == 2  # the links never eat the hashtag allowance
+
+
+def test_series_file_carries_both_affiliate_links():
+    cap = load_series(Path(__file__).parents[1] / "series" / "everyday-boss-fights.yaml").caption
+    lines = cap.affiliate_lines("youtube")
+    assert any("higgsfield.ai" in x for x in lines) and any("elevenlabs.io" in x for x in lines)
+    assert all("affiliate link" in x for x in [*lines, *cap.affiliate_lines("instagram")])
