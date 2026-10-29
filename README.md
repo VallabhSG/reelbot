@@ -65,8 +65,8 @@ pytest
 
 ### Instant buttons (optional, free)
 
-On GitHub Actions the bot only reads Telegram when a scheduled run starts (every 30 min). For
-taps that act right away, a tiny Cloudflare Worker (`relay/telegram-relay.js`) receives them from
+On GitHub Actions without this, the bot only reads Telegram when a scheduled run starts (4 a day,
+see Deploy). For taps that act right away, a tiny Cloudflare Worker (`relay/telegram-relay.js`) receives them from
 Telegram, shows "On it…" on the button, stores the tap in the private state bucket and starts a run
 (about a minute to act). Taps wait safely in the bucket, so nothing is lost if a run is delayed.
 
@@ -119,16 +119,20 @@ once they qualify for Content Monetization; uploading the clean file avoids the 
 
 ## Deploy
 
-**GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` every 30 min
-from 08:30 to 23:30 IST. Each run pulls the DB and in-flight renders from the private
+**GitHub Actions (default, $0):** `.github/workflows/reelbot.yml` runs `reelbot tick` at the fixed
+times only: 10:05 IST (make the episode on episode days) and 19:32 IST (publish, measure, Sunday
+report), each with a backup 30 min later. Telegram taps start their own run through the relay
+(*Instant buttons*), so nothing polls. Each run pulls the DB and in-flight renders from the private
 `S3_STATE_BUCKET`, does one pass (Telegram buttons → generate if due → publish if due), pushes state
 back. Put the whole `.env` into one repo secret named `ENV_FILE`. Kick off runs by hand from
 Actions → reelbot → Run workflow: pick a command and, if it needs them, type its arguments in the
 *args* box (`pick` → `Juno 3 Mochi 1`, `approve` → `2 --now`, `reject` → `1`, `regen` → `2 3`).
-Every action done this way is also confirmed in Telegram. ~1 billed minute per idle run plus
-~10–15 per reel keeps a private repo inside the free 2,000 min/month.
+Every action done this way is also confirmed in Telegram. GitHub bills each run rounded up to the
+minute (an idle run is ~1), plus ~10–15 per reel: a few hundred of the free 2,000 min/month. When
+the free minutes run out, GitHub stops starting runs until the month resets (or a budget is set
+under Settings → Billing), so nothing posts: check Settings → Billing → Usage if runs stop.
 
-Telegram buttons are read by the next `tick` (scheduled every 30 min, or run one by hand). Each
+Without the relay, Telegram buttons are read by the next `tick` (scheduled, or run one by hand). Each
 tick's log ends with a line like `tick: Telegram: 2 handled · generate: not due · publish: nothing
 due`, and every tap gets a reply in the chat, including when it fails.
 
