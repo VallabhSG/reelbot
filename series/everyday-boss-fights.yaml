@@ -313,6 +313,9 @@ caption:
   # Instagram allows 5 since Dec 2025 (1-2 broad, 1-2 medium, 1 niche); keywords in the caption
   # matter more for search now
   hashtags: ["#anime", "#relatable", "#aianimation", "#aishortfilm", "#bossfight"]
+  # Paste your Higgsfield affiliate link here once approved; every post then carries it, labelled
+  # as an affiliate link ("link in bio" on Instagram, the link itself on YouTube and Facebook).
+  affiliate_url: "https://higgsfield.ai?fpr=vallabh-8bf470"
 
 budget:
   monthly_usd: 40

@@ -162,6 +162,12 @@ class CaptionSpec(BaseModel):
     template: str = "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
     credits: str = ""
     hashtags: list[str] = Field(default_factory=list)
+    # Affiliate link (e.g. your Higgsfield one). Empty = nothing is added. Instagram captions can't
+    # hold a clickable link, so they point to the bio; YouTube and Facebook get the link itself.
+    # Added when a reel is posted, so reels planned earlier get it too.
+    affiliate_url: str = ""
+    affiliate_instagram: str = "🎬 Made with Higgsfield · affiliate link in bio"
+    affiliate_link_text: str = "🎬 Made with Higgsfield (affiliate link): {url}"
 
 
 class YouTubeSpec(BaseModel):

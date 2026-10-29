@@ -127,3 +127,16 @@ def test_captions_keep_only_five_hashtags():
     assert "The doors always wait." in out and "\n\n" in out
     assert limit_hashtags("no tags here") == "no tags here"
     assert limit_hashtags("caf&#233; #one") == "caf&#233; #one"
+
+
+def test_affiliate_line_sits_above_the_hashtags_on_every_platform(dry_settings, series):
+    p = build(dry_settings, series).pipeline
+    cap = "Ep 1\n\nThe doors always wait.\n\nAnimated with Kling\n\n#anime #aianimation"
+    assert p.with_affiliate(cap, "instagram") == cap  # no link set: nothing added
+    series.caption.affiliate_url = "https://higgsfield.ai/?ref=val"
+    ig = p.with_affiliate(cap, "instagram")
+    assert ig.endswith("affiliate link in bio\n\n#anime #aianimation") and "https://" not in ig
+    yt = p.with_affiliate(cap, "youtube")
+    assert "(affiliate link): https://higgsfield.ai/?ref=val\n\n#anime" in yt
+    assert p.with_affiliate(yt, "youtube") == yt  # never twice
+    assert p.with_affiliate("no tags", "facebook").endswith("https://higgsfield.ai/?ref=val")

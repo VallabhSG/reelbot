@@ -804,7 +804,10 @@ class Pipeline:
             if (cover := self.db.kv_get(f"cover:{job_id}")) and Path(cover).exists():
                 _, cover_url = self.storage.put_public(Path(cover), f"reels/{job_id}")
             media_id = self.publisher.publish_reel(
-                url, limit_hashtags(job["caption"]), self.s.title_card.cover_offset_ms, cover_url=cover_url
+                url,
+                limit_hashtags(self.with_affiliate(job["caption"], "instagram")),
+                self.s.title_card.cover_offset_ms,
+                cover_url=cover_url,
             )
         except Exception as e:
             self.db.update_job(
@@ -841,10 +844,26 @@ class Pipeline:
             "hashtags": " ".join(cap.hashtags[:3]),  # YouTube shows the first 3 above the title
         }
 
+    def with_affiliate(self, text: str, platform: str) -> str:
+        """Add the affiliate line just above the hashtags (labelled as an affiliate link)."""
+        cap = self.s.caption
+        if not cap.affiliate_url:
+            return text
+        if platform == "instagram":
+            line = cap.affiliate_instagram
+        else:
+            line = cap.affiliate_link_text.format(url=cap.affiliate_url)
+        if not line or line in text:
+            return text
+        lines = text.rstrip().splitlines()
+        if lines and lines[-1].lstrip().startswith("#"):
+            return "\n".join(lines[:-1]).rstrip() + f"\n\n{line}\n\n" + lines[-1]
+        return text.rstrip() + f"\n\n{line}"
+
     def youtube_meta(self, job_id: int) -> tuple[str, str, list[str]]:
         values, yt = self._meta_values(job_id), self.s.youtube
         title = " ".join(yt.title.format(**values).split())
-        description = yt.description.format(**values).strip()
+        description = self.with_affiliate(yt.description.format(**values).strip(), "youtube")
         return title, description, [*self.s.caption.hashtags, self.s.series.name]
 
     def _video_file(self, job_id: int) -> Path:
@@ -883,7 +902,10 @@ class Pipeline:
             fb = self.s.facebook
             title = " ".join(fb.title.format(**self._meta_values(job_id)).split())
             post_id = client.publish_reel(
-                path, self.db.get_job(job_id)["caption"] or title, title=title, ai_generated=fb.ai_label
+                path,
+                self.with_affiliate(self.db.get_job(job_id)["caption"] or title, "facebook"),
+                title=title,
+                ai_generated=fb.ai_label,
             )
             link = f"📘 #{job_id} is on Facebook: {reel_url(post_id)}"
         self.db.kv_set(f"{platform}_id:{job_id}", post_id)
