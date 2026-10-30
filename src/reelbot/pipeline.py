@@ -341,6 +341,15 @@ class Pipeline:
         subtitle = tc.subtitle.format(handle=self.s.series.handle, n=episode_no, nn=f"{episode_no:02d}")
         return render_title_card(plan.title, subtitle, tc, font, self._dir(job_id) / "title.png")
 
+    def _boss_card(self, job_id: int, plan: EpisodePlan) -> Path:
+        """Fighting-game name card for today's boss, in the title-card font and colours."""
+        tc, t = self.s.title_card, self.s.take
+        font = self.s.resolve(tc.font) if tc.font else None
+        spec = tc.model_copy(update={"y_ratio": t.boss_card_y_ratio})
+        return render_title_card(
+            plan.category.strip().upper(), t.boss_card_label, spec, font, self._dir(job_id) / "boss_card.png"
+        )
+
     @staticmethod
     def _climax_index(plan: EpisodePlan) -> int:
         beats = [s.beat for s in plan.shots]
@@ -524,6 +533,9 @@ class Pipeline:
                         color=self.s.title_card.subtitle_color,
                     )
                     subs.append((png, t0 + 0.15, t0 + s.seconds - 0.1))
+        if t.boss_card_s > 0 and plan.category.strip():  # "SNOOZE BUTTON / FINAL BOSS"
+            a = t.boss_card_from_s
+            subs.append((self._boss_card(job_id, plan), a, a + t.boss_card_s))
         out = assemble_take(
             TakeAssembly(
                 take=take,

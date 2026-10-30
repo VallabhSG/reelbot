@@ -126,6 +126,16 @@ class TakeSpec(BaseModel):
     flash_on_climax: bool = True  # a 2-frame white flash frame on the cut into the climax
     impact_frame: bool = True  # then ~0.2 s anime impact frame: black & white under speed lines
     music_bpm: int = 120  # cuts fall on whole seconds, which are beats at 120 BPM
+    # Endings: "alternate" = every other episode ends in a big WIN in front of a witness instead of
+    # the deadpan anticlimax (top accounts' underdog-wins reels far outdraw their deadpan gags);
+    # "deadpan" = always the anticlimax. Fixed (scripted) episodes keep their own payoff.
+    endings: Literal["alternate", "deadpan"] = "alternate"
+    # Boss name card: a fighting-game title over the opening ("SNOOZE BUTTON / FINAL BOSS") for a
+    # moment, in the title-card font and colours. Set boss_card_s to 0 to turn it off.
+    boss_card_label: str = "FINAL BOSS"
+    boss_card_from_s: float = 0.4
+    boss_card_s: float = Field(1.3, ge=0, le=3)
+    boss_card_y_ratio: float = Field(0.2, ge=0.05, le=0.9)
 
     @model_validator(mode="after")
     def _fits(self) -> TakeSpec:

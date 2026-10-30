@@ -293,3 +293,28 @@ def test_music_ducks_only_while_the_words_are_spoken(dry_settings, take_series, 
     assert b - a == pytest.approx(pl.spoken_seconds(last.line))  # "Wrong train." ~1.8 s
     assert b - a < last.seconds  # the rest of the payoff shot keeps its music
     assert seen[-1].impacts and seen[-1].speed_lines.exists()
+
+
+@needs_ffmpeg
+def test_the_boss_gets_a_name_card_over_the_opening(dry_settings, take_series):
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    job = p.plan_next()
+    out = p.generate(job)
+    card = Path(app.db.get_job(job)["video_path"]).parent / "boss_card.png"
+    assert card.exists() and probe_duration(out) == pytest.approx(15, abs=0.1)
+    take_series.take.boss_card_s = 0
+    job2 = p.plan_next()
+    p.generate(job2)
+    assert not (Path(app.db.get_job(job2)["video_path"]).parent / "boss_card.png").exists()
+
+
+def test_every_other_episode_ends_in_a_triumph(take_series):
+    from reelbot.planner import ENDING_DEADPAN, ENDING_TRIUMPH, Planner
+
+    take_series.episodes = []  # unscripted episodes (a scripted one keeps its own payoff)
+    planner = Planner(None, take_series)
+    assert ENDING_DEADPAN in planner.user_prompt(1, []) and ENDING_TRIUMPH in planner.user_prompt(2, [])
+    take_series.take.endings = "deadpan"
+    assert ENDING_TRIUMPH not in planner.user_prompt(2, [])
+    assert "COLOUR CODE THE FIGHT" in planner.system_prompt()

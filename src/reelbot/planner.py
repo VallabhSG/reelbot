@@ -62,7 +62,7 @@ DIALOGUE_NONE = """- line / speaker: always "". The episode is wordless: the sto
 
 DIALOGUE_BOOKENDS = """- DIALOGUE BOOKENDS (the format of the most-watched reels in this niche): a few very short spoken
   lines set up the stakes at the start, the middle is pure action with sound effects and music,
-  and one deadpan line lands the punchline in the twist.
+  and one short line (deadpan, or smug after a win) lands the punchline in the twist.
   line: at most {max_lines} lines in the whole episode, only on hook/escalate shots (set-up) and the
   twist shot (punchline). Max 10 words each, everyday spoken English, no names of brands. Every
   other shot: line "" and speaker "".
@@ -89,6 +89,19 @@ Answer honestly, as a viewer, not as a writer:
 
 JSON only: {"summary": str, "confusions": [str], "clear": bool, "score": int}"""
 
+ENDING_TRIUMPH = (
+    "ENDING for this episode: TRIUMPH. The twist beat is the hero's big, satisfying win landing in "
+    "front of someone who doubted her or is watching (a jaw drop, a drink spilling), then her smug "
+    "face turned to the camera. No deadpan defeat this time."
+)
+ENDING_DEADPAN = "ENDING for this episode: DEADPAN. The twist is the deadpan anticlimax."
+
+
+def wins_this_episode(series: Series, episode_no: int) -> bool:
+    """`take.endings: alternate`: even-numbered episodes end in a triumph, odd ones deadpan."""
+    return series.take.endings == "alternate" and episode_no % 2 == 0
+
+
 SYSTEM_TAKE = """You are the director of an anime micro-film series for Instagram Reels.
 Each episode is ONE continuous {seconds}-second scene in exactly {n} shots with hard cuts, rendered
 in a single generation, then cut to music. No narration and no on-screen text.
@@ -103,7 +116,8 @@ METHOD (how the most-watched creator in this niche works)
   episode backward from it. hook = the goal and why it matters right now (stakes in one glance);
   escalate = how strong or unfair the boss is (show contrast: the small hero vs a huge problem,
   staged like a dangerous arena); clash = the fight; climax = the winning move itself (slow motion or an
-  extreme close-up); twist = the deadpan anticlimax. One simple idea, every shot serves it.
+  extreme close-up); twist = the deadpan anticlimax, or the TRIUMPH when the episode asks for one.
+  One simple idea, every shot serves it.
 - Pace: slow, then faster, a burst on the winning move, one quiet beat, then the twist.
 - The stake is social and relatable, a feeling everyone knows: someone is waiting, a message just
   arrived, a crush is watching, a parent is calling, the last one is about to go. A quick phone call
@@ -123,6 +137,10 @@ METHOD (how the most-watched creator in this niche works)
 - THE TURN IS AN INSERT: the winning move starts on a tight insert of a hand on the one object that
   matters (a thumb pressing the key fob, fingers closing on the plug, a finger over the snooze
   button), then cut wide to what it causes.
+- COLOUR CODE THE FIGHT: the opening is ordinary flat daylight or room light; the moment the boss
+  "powers up", the light turns to boss mode (saturated red or cyan rim light, long shadows, the
+  background darkening); the last shot snaps back to the flat light of the opening. Name the light
+  in each shot's description.
 - A WITNESS SELLS IT: right after the winning move, one shot of someone watching it (Mochi, a
   bystander, Ren when he is in the episode) reacting big: jaw drop, a drink spilling, glasses
   sliding down the nose. The audience feels the payoff through them. When shots are short, this
@@ -164,7 +182,8 @@ STORYBOARD RULES
   escalate = the character commits, tension rises;
   clash = the big dynamic action, energy, motion;
   climax = the decisive instant (slow motion or extreme close-up);
-  twist = a deadpan, funny anticlimax that recontextualises everything.
+  twist = a deadpan, funny anticlimax that recontextualises everything (or the TRIUMPH, when the
+  episode asks for it: the win lands in front of a witness).
 - camera: exactly ONE physical move per shot: "static locked-off", "slow push-in", "fast push-in",
   "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "handheld follow",
   "whip pan", "slow-motion speed ramp" (climax only).
@@ -278,6 +297,8 @@ class Planner:
                 "- Homage: pick the ONE famous movie moment below that fits this gag best and stage the "
                 f"climax like it. {film_rule} Options: " + "; ".join(s.homages)
             )
+        if s.take.enabled and not (seed and seed.scripted):
+            lines.append(ENDING_TRIUMPH if wins_this_episode(s, episode_no) else ENDING_DEADPAN)
         if guidance:  # lessons from earlier episodes (learn.planner_guidance)
             lines.append(guidance)
         if past_titles:
