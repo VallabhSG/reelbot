@@ -133,7 +133,9 @@ METHOD (how the most-watched creator in this niche works)
   behind the face, heart eyes, a giant sweat drop, steam from the ears.
 - THE CHALLENGER'S ENTRANCE: early on, one low-angle extreme close-up of the hero gearing up like a
   fighter before a boss (tying her hair back, cracking her knuckles, a glint across her glasses,
-  her sneakers planting on the ground), then cut wide. One second is enough.
+  her sneakers planting on the ground), then cut wide. One second is enough. A strong version is a
+  REFLECTION that holds both fighters in one frame: the boss reflected in her glasses, or her face
+  reflected in the boss itself (the phone's black screen, the microwave door, the train window).
 - THE TURN IS AN INSERT: the winning move starts on a tight insert of a hand on the one object that
   matters (a thumb pressing the key fob, fingers closing on the plug, a finger over the snooze
   button), then cut wide to what it causes.
