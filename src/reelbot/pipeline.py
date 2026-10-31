@@ -772,9 +772,18 @@ class Pipeline:
         }
 
     def slots(self, job_id: int) -> dict[str, str] | None:
-        """Per-platform release times, or None for reels approved before staggering existed."""
+        """Per-platform release times, or None for reels approved before staggering existed.
+        With no stagger, every platform goes at once: a reel approved while staggering was on is
+        moved to its earliest slot, so nothing waits days for a schedule that no longer applies."""
         raw = self.db.kv_get(f"slots:{job_id}")
-        return json.loads(raw) if raw else None
+        if not raw:
+            return None
+        slots: dict[str, str] = json.loads(raw)
+        if not self.s.schedule.stagger and len(set(slots.values())) > 1:
+            first = min(slots.values())
+            slots = dict.fromkeys(slots, first)
+            self.db.kv_set(f"slots:{job_id}", json.dumps(slots))
+        return slots
 
     def release_plan_text(self, job_id: int, tz: Any) -> str:
         slots = self.slots(job_id) or {}

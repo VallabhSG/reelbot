@@ -389,9 +389,8 @@ schedule:
   # 3 a week: ~$2.60 a reel on OpenRouter (Seedance 2.0 + Higgsfield frames) is ~$34 a month,
   # inside the $40 cap (with room for a retake or two; the guard stops at the cap anyway).
   days: [tue, thu, sat]
-  # Each reel goes to one platform a day over 3 days (Tue reel Tue/Wed/Thu, Thu reel Thu/Fri/Sat,
-  # Sat reel Sat/Sun/Mon), so most days carry a post somewhere.
-  # rotate: the order shifts every week, so in 3 weeks each platform has tried every day; the
-  # weekly report ("Views by posting day") then shows which days work best.
-  stagger: [instagram, youtube, facebook]
-  rotate: true
+  # Every episode goes to all three platforms at once, at publish_at on the day it's made (Val,
+  # 31 Oct). To spread a reel over days again, list the platforms in order, e.g.
+  # stagger: [instagram, youtube, facebook] (one a day), and rotate: true to shift that weekly.
+  stagger: []
+  rotate: false

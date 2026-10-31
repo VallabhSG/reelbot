@@ -147,3 +147,20 @@ def test_facebook_stats_take_the_reel_play_count():
         )
     )
     assert FacebookPublisher("P", "T").stats("R1") == {"views": 940.0, "avg_watch_ms": 6100.0}
+
+
+def test_turning_staggering_off_moves_an_approved_reel_to_its_first_slot(dry_settings):
+    app = _app(dry_settings, rotate=True)
+    jid = _review_job(app)
+    app.pipeline.approve(jid, BASE)
+    staggered = app.pipeline.slots(jid)
+    assert len(set(staggered.values())) == 3
+    app.series.schedule.stagger = []  # every platform at once from now on
+    slots = app.pipeline.slots(jid)
+    assert set(slots.values()) == {min(staggered.values())} and set(slots) == set(staggered)
+    p = app.pipeline
+    p.publish_due(datetime.fromisoformat(min(staggered.values())) + timedelta(minutes=1))
+    assert app.db.get_job(jid)["status"] == JobStatus.PUBLISHED
+    assert p.crosspost_platforms() and all(  # every platform went out in the same run
+        app.db.kv_get(f"{x}_id:{jid}") for x in p.crosspost_platforms()
+    )

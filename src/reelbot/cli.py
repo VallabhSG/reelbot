@@ -86,6 +86,8 @@ def cmd_check(_: argparse.Namespace) -> int:
         f" · cap ${series.budget.monthly_usd:.2f}/month, ${series.budget.per_reel_usd:.2f}/reel"
     )
     sch = series.schedule
+    if not sch.stagger:
+        print(f"  release: every platform at once, {sch.publish_at}")
     if sch.stagger:
         print(
             f"  release: one platform a day ({' -> '.join(sch.stagger)})"
