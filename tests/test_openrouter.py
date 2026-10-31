@@ -166,6 +166,33 @@ def test_the_series_take_goes_to_openrouter_with_the_opening_frame(tmp_path, db)
     assert series.estimate_reel_cost() < 3  # was ~$4.75 on Higgsfield
 
 
+def test_reference_mode_sends_every_image_as_an_openrouter_reference(db):
+    series = load_series(ROOT / "series" / "everyday-boss-fights.yaml")
+    assert set(series.take.bakeoff) == {"seedance2", "seedance2_ref"}
+
+    class FakeOR:
+        def __init__(self):
+            self.calls = []
+
+        def generate(self, model, body):
+            self.calls.append((model, body))
+            return "file:///tmp/take.mp4", 2.4
+
+    fake = FakeOR()
+    guard = BudgetGuard(db, Budget(monthly_usd=40, per_reel_usd=9), "Asia/Kolkata")
+    hf = HiggsfieldClient("id", "secret", "https://api.higgsfield.ai")
+    media = HiggsfieldMedia(hf, series.models, guard, series.base_dir, openrouter=fake)
+    refs = [
+        {"type": "image_url", "image_url": {"url": u}} for u in ("https://f/open.png", "https://f/juno.png")
+    ]
+    ctx = {"prompt": "p", "image_refs": refs, "duration": 15, "aspect_ratio": "9:16"}
+    media.take("seedance2_ref", ctx, job_id=8)
+    model, body = fake.calls[0]
+    assert model == "bytedance/seedance-2.0" and body["input_references"] == refs
+    assert "frame_images" not in body
+    assert series.models.takes["seedance2_ref"].ref_token == "@Image {n}"
+
+
 def test_without_a_key_an_openrouter_take_says_what_to_set(db):
     series = load_series(ROOT / "series" / "everyday-boss-fights.yaml")
     guard = BudgetGuard(db, Budget(monthly_usd=40, per_reel_usd=9), "Asia/Kolkata")

@@ -207,7 +207,10 @@ take:
   seconds: 15
   shots: 6           # 1-4 s each (the reference reels cut every ~1 s, on the beat)
   model: seedance2      # default for scheduled reels; a bake-off winner overrides it
-  bakeoff: [kling3, seedance2]   # add seedance25 in the args box to test it too (~$8.50 list)
+  # Bake-off (Actions -> bakeoff): one storyboard on each model, pick the winner in Telegram and it
+  # becomes the default. seedance2_ref is the same model and price with the cast sheets attached
+  # (reference mode); add seedance25_ref in the args box to test the newer model too (~$3.70 a reel).
+  bakeoff: [seedance2, seedance2_ref]
   dialogue: bookends # short lines at the start and the twist, wordless action in between
   max_lines: 3
   subtitles: true
@@ -291,6 +294,45 @@ models:
       # Long production prompts with the director's pass: ~1,700-2,200 words, longer than any
       # published sample (ByteDance's run 500-1,500; the API takes ~20,000 characters). Over the cap,
       # each shot loses its sound and last frame first. Shared with the fallback below.
+      max_prompt_chars: 14000
+    # Seedance 2.0 on OpenRouter in reference mode: same price, but the model gets the opening frame
+    # AND every cast sheet (Juno, Mochi, Ren), so faces and outfits hold after every cut instead of
+    # being redrawn from words. ByteDance's reference syntax: "@Image 1 as the first frame".
+    # The top accounts (kenai.film: "created using seedance 2.5") all work from references.
+    seedance2_ref:
+      label: "Seedance 2.0 + cast refs"
+      provider: openrouter
+      fallback: seedance2_hf
+      endpoint: "bytedance/seedance-2.0"
+      input:
+        prompt: "{prompt}"
+        duration: "{duration}"
+        resolution: "720p"
+        aspect_ratio: "{aspect_ratio}"
+        generate_audio: true
+        input_references: "{image_refs}"
+      output_path: ""
+      cost_per_second: 0.16
+      ref_token: "@Image {n}"
+      start_frame: true
+      max_prompt_chars: 14000
+    # Seedance 2.5 on OpenRouter, reference mode ($10.7 per 1M video tokens: ~$3.66 a 15 s reel).
+    seedance25_ref:
+      label: "Seedance 2.5 + cast refs"
+      provider: openrouter
+      fallback: seedance2_hf
+      endpoint: "bytedance/seedance-2.5"
+      input:
+        prompt: "{prompt}"
+        duration: "{duration}"
+        resolution: "720p"
+        aspect_ratio: "{aspect_ratio}"
+        generate_audio: true
+        input_references: "{image_refs}"
+      output_path: ""
+      cost_per_second: 0.25
+      ref_token: "@Image {n}"
+      start_frame: true
       max_prompt_chars: 14000
     # The same model on Higgsfield (~$0.30/s, twice the price): set take.model to seedance2_hf to
     # switch back, e.g. if OpenRouter is down.

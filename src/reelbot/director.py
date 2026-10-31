@@ -69,7 +69,13 @@ Write two things:
 - atmosphere and small life: dust in a light beam, a plant, a mug, a crumpled blanket; posters,
   paintings and screens show only plain abstract shapes, never words and never the story's
   objects, motif or symbols
-- end with the palette: 3-5 named colours
+- RICH ENOUGH TO FILL EVERY FRAME: something in the foreground, the middle and the back from any
+  angle; at least two light sources of different colours (a warm lamp and a cool window, a
+  screen's glow); surfaces that catch light (a glossy floor, glass, a screen, metal, a wet sill)
+  with their reflections; atmosphere in the light (dust, steam, haze); something alive in the
+  background (a curtain moving, rain on the glass, a ceiling fan turning). Name materials and
+  textures (worn wood grain, knitted wool, scuffed rubber, brushed steel)
+- end with the palette: 3-5 named colours, one warm and one cool that fight each other
 Never people or animals (the cast is described separately), never brands, logos or readable text,
 nothing that contradicts the location description or the layout.
 
@@ -92,7 +98,9 @@ them out. Present tense, plain physical words, in this order:
    focus.
 3. The frame as the shot starts, foreground, midground and background: every character and every
    element of the set that is visible, where it sits in the frame (left, centre or right third,
-   top or bottom), its colour.
+   top or bottom), its colour and material. Never a flat, empty background: name the foreground
+   element, the subject and the background detail; a light source visible in frame when the shot
+   allows; reflections and highlights on glossy surfaces.
 4. The action as ordered beats ("first ... for half a second; then ...; in the last second ..."):
    which body part moves, which way on screen, how fast, what it touches, what it pushes or pulls.
 5. The acting as visible detail: brows, eyes, pupils, mouth, breath, shoulders, hands. Never

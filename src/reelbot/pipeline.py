@@ -575,6 +575,8 @@ class Pipeline:
                 "prompt": prompt,
                 "prompt_global": tp.global_prompt,
                 "image_urls": refs,
+                # the same images as OpenRouter's reference list (image 1 = the opening frame)
+                "image_refs": [{"type": "image_url", "image_url": {"url": u}} for u in refs],
                 "video_urls": video_refs,
                 "start_image": keyframe or refs[0],
                 "shots": tp.shots,

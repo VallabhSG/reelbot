@@ -427,3 +427,27 @@ def test_the_story_start_reaches_the_images_and_the_music_follows_the_beats(dry_
     assert "[START STATE, before anything happens] the train waits" in _calls(p, "take")[0]["prompt"]
     chunks = p.music.chunks[-1]
     assert sum(c["duration_ms"] for c in chunks) == take_series.take.seconds * 1000
+
+
+def test_reference_mode_sends_the_opening_frame_and_every_cast_sheet(dry_settings, take_series):
+    from reelbot.series import ModelSpec
+
+    take_series.models.takes["seedance2_ref"] = ModelSpec(
+        label="Seedance 2.0 + cast refs",
+        endpoint="bytedance/seedance-2.0",
+        input={"prompt": "{prompt}", "input_references": "{image_refs}"},
+        output_path="video.url",
+        cost_per_second=0.16,
+        ref_token="@Image {n}",
+        start_frame=True,
+    )
+    take_series.take.model = "seedance2_ref"
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    job = p.plan_next()
+    p.generate(job)
+    take = _calls(p, "take")[0]
+    keyframe = app.db.kv_get(f"keyframe:{job}")
+    assert take["image_refs"][0] == {"type": "image_url", "image_url": {"url": keyframe}}
+    assert [r["image_url"]["url"] for r in take["image_refs"][1:]] == [p.cast_urls()["Kai"]]
+    assert take["prompt"].startswith("Use @Image 1 as the first frame, @Image 2 as the Kai reference.")
