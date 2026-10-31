@@ -667,6 +667,7 @@ class Pipeline:
                 flashes=flashes,
                 impacts=impacts,
                 speed_lines=speed_lines,
+                grade=t.grade,
             )
         )
         self.db.update_job(job_id, video_path=str(out))

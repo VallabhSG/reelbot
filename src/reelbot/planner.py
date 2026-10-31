@@ -179,9 +179,9 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
 - Keep screen direction: whoever moves, moves the same way on screen in every shot ("direction").
 - Short shots: {lo}-{hi} seconds each, summing to {seconds}. Fast shots (1-2 s) in escalate/clash,
   the climax may hold 3-4 s (slow motion). Whole seconds only.
-- Mix scales like a film editor: establishing wide, medium, and at least one detail INSERT
-  (hands, an object, feet, eyes: CU or ECU). Never the same size twice in a row. At least one CU/ECU
-  and one WS/EWS.
+- Mix scales like a film editor: establishing wide, medium, and at least TWO detail INSERTS
+  (hands, the key object, feet, eyes: CU or ECU), the way the top reels cut to a wheel, a sneaker, a
+  key fob every few seconds. Never the same size twice in a row. At least one CU/ECU and one WS/EWS.
 - motif: ONE small object or colour (e.g. "a red hair tie", "the green exit light") that appears in
   at least two shots and pays off in the climax or twist. It ties the cuts together. It lives on a
   story prop or a character (a phone screen, a hair tie), never as a poster or wall decoration.

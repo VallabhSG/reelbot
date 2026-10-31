@@ -143,6 +143,9 @@ class TakeSpec(BaseModel):
     quiet_before_twist_s: float = 0.6  # "one quiet second before the ending" after the burst
     flash_on_climax: bool = True  # a 2-frame white flash frame on the cut into the climax
     impact_frame: bool = True  # then ~0.2 s anime impact frame: black & white under speed lines
+    # One look on every reel, whatever the take came out like (an ffmpeg filter chain after the
+    # upscale; "" = none). The series file sets it.
+    grade: str = ""
     music_bpm: int = 120  # cuts fall on whole seconds, which are beats at 120 BPM
     # Endings: "alternate" = every other episode ends in a big WIN in front of a witness instead of
     # the deadpan anticlimax (top accounts' underdog-wins reels far outdraw their deadpan gags);

@@ -451,3 +451,44 @@ def test_reference_mode_sends_the_opening_frame_and_every_cast_sheet(dry_setting
     assert take["image_refs"][0] == {"type": "image_url", "image_url": {"url": keyframe}}
     assert [r["image_url"]["url"] for r in take["image_refs"][1:]] == [p.cast_urls()["Kai"]]
     assert take["prompt"].startswith("Use @Image 1 as the first frame, @Image 2 as the Kai reference.")
+
+
+def test_every_reel_gets_the_crisp_upscale_and_the_one_grade(tmp_path):
+    from reelbot.assemble import build_take_command
+
+    p = TakeAssembly(
+        tmp_path / "t.mp4", 15.0, None, 0.0, -8.0, [], tmp_path / "o.mp4", grade="eq=contrast=1.06"
+    )
+    graph = " ".join(build_take_command(p, sfx=False))
+    assert "flags=lanczos" in graph and "eq=contrast=1.06" in graph
+    plain = " ".join(
+        build_take_command(
+            TakeAssembly(tmp_path / "t.mp4", 15.0, None, 0.0, -8.0, [], tmp_path / "o.mp4"), sfx=False
+        )
+    )
+    assert "eq=contrast=1.06" not in plain
+
+
+def test_the_series_grade_is_a_valid_filter(tmp_path):
+    from pathlib import Path
+
+    from reelbot.series import load_series
+
+    grade = load_series(Path(__file__).parents[1] / "series" / "everyday-boss-fights.yaml").take.grade
+    src = tmp_path / "s.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=72x128:d=0.2", str(src)],
+        check=True,
+    )
+    out = tmp_path / "g.mp4"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-vf", grade, str(out)], check=True)
+    assert "curves=" in grade and out.exists()
+
+
+def test_the_opening_frame_is_asked_to_be_rich(take_series):
+    from reelbot.storyboard import compose_keyframe_prompt, normalise
+
+    from .test_take import _plan
+
+    prompt = compose_keyframe_prompt(take_series, normalise(take_series, _plan()), ["Kai"])
+    assert "A rich, layered frame" in prompt and "crisp line art" in prompt

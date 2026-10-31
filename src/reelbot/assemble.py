@@ -177,6 +177,9 @@ class TakeAssembly:
     # speed lines for a few frames, the way the top reels hit their climax
     impacts: list[tuple[float, float]] = field(default_factory=list)
     speed_lines: Path | None = None
+    # one consistent look on every reel (an ffmpeg filter chain; "" = none), applied after the
+    # lanczos upscale from the model's 720p
+    grade: str = ""
 
 
 IMPACT_FRAMES = 6  # ~0.2 s at 30 fps
@@ -227,8 +230,11 @@ def build_take_command(p: TakeAssembly, sfx: bool) -> list[str]:
     if impacts:
         cmd += ["-loop", "1", "-t", f"{total}", "-i", str(p.speed_lines)]
     base = (
-        f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},setsar=1,"
-        f"trim=duration={total},setpts=PTS-STARTPTS"
+        # lanczos keeps the anime linework crisp on the 720p -> 1080p upscale
+        f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},"
+        f"fps={FPS},setsar=1,"
+        + (f"{p.grade}," if p.grade else "")
+        + f"trim=duration={total},setpts=PTS-STARTPTS"
     )
     for t0 in p.flashes:  # "flash frames": two white frames right on the cut
         base += f",drawbox=c=white@0.9:t=fill:enable='{_between(t0, t0 + 2 / FPS)}'"
