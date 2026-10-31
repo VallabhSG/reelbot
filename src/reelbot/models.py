@@ -5,12 +5,72 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 Beat = Literal["hook", "escalate", "clash", "climax", "twist"]
 ShotSize = Literal["EWS", "WS", "MS", "MCU", "CU", "ECU"]
 
 BEATS: tuple[Beat, ...] = ("hook", "escalate", "clash", "climax", "twist")
+
+# The planner LLM sometimes spells these out ("extreme close-up", "escalation"): accept the near
+# misses instead of throwing the whole plan away (a day with 4 failed attempts makes no episode).
+SIZE_ALIASES = {
+    "EXTREMECLOSEUP": "ECU",
+    "XCU": "ECU",
+    "BCU": "ECU",
+    "EXTREMECU": "ECU",
+    "MACRO": "ECU",
+    "CLOSEUP": "CU",
+    "CLOSE": "CU",
+    "MEDIUMCLOSEUP": "MCU",
+    "MEDIUMCU": "MCU",
+    "MEDIUMSHOT": "MS",
+    "MEDIUM": "MS",
+    "MID": "MS",
+    "MIDSHOT": "MS",
+    "MEDIUMWIDE": "MS",
+    "MWS": "MS",
+    "WIDESHOT": "WS",
+    "WIDE": "WS",
+    "LS": "WS",
+    "LONGSHOT": "WS",
+    "FULLSHOT": "WS",
+    "FS": "WS",
+    "EXTREMEWIDESHOT": "EWS",
+    "EXTREMEWIDE": "EWS",
+    "ELS": "EWS",
+    "EXTREMELONGSHOT": "EWS",
+    "ESTABLISHING": "EWS",
+    "ESTABLISHINGSHOT": "EWS",
+    "XWS": "EWS",
+}
+BEAT_ALIASES = {
+    "setup": "hook",
+    "intro": "hook",
+    "opening": "hook",
+    "open": "hook",
+    "stakes": "hook",
+    "escalation": "escalate",
+    "build": "escalate",
+    "buildup": "escalate",
+    "rise": "escalate",
+    "fight": "clash",
+    "action": "clash",
+    "conflict": "clash",
+    "battle": "clash",
+    "peak": "climax",
+    "winningmove": "climax",
+    "resolution": "twist",
+    "payoff": "twist",
+    "punchline": "twist",
+    "ending": "twist",
+    "end": "twist",
+    "outro": "twist",
+}
+
+
+def _key(v: str) -> str:
+    return "".join(ch for ch in v if ch.isalnum())
 
 
 class Location(BaseModel):
@@ -21,6 +81,23 @@ class Location(BaseModel):
 class ShotPlan(BaseModel):
     beat: Beat
     size: ShotSize
+
+    @field_validator("size", mode="before")
+    @classmethod
+    def _size_alias(cls, v: object) -> object:
+        if isinstance(v, str):
+            k = _key(v).upper()
+            return SIZE_ALIASES.get(k, k)
+        return v
+
+    @field_validator("beat", mode="before")
+    @classmethod
+    def _beat_alias(cls, v: object) -> object:
+        if isinstance(v, str):
+            k = _key(v).lower()
+            return BEAT_ALIASES.get(k, k)
+        return v
+
     angle: str = Field(min_length=3, description="eye level, low angle, high angle, overhead, POV, dutch")
     camera: str = Field(min_length=3, description="one physical camera move")
     cast: list[str] = Field(default_factory=list, max_length=3)
@@ -32,6 +109,9 @@ class ShotPlan(BaseModel):
     sound: str = Field("", description="the one diegetic sound of this shot, no speech")
     line: str = Field("", description="optional short spoken line (dialogue bookends only)")
     speaker: str = Field("", description="who says the line: a speaking character in this shot")
+    framing: str = Field("", description="where everyone and every key prop sits in the frame")
+    performance: str = Field("", description="face and body acting plus secondary motion")
+    fx: str = Field("", description="the anime effect drawn in the picture, if any")
 
 
 class EpisodePlan(BaseModel):
@@ -48,11 +128,27 @@ class EpisodePlan(BaseModel):
     motif: str = Field("", description="one small object/colour that recurs and pays off")
     direction: str = Field("", description="screen direction kept in every shot, e.g. left to right")
     opening_frame: str = Field("", description="the first frame: who is where, pose, framing")
+    layout: str = Field("", description="the fixed geography: where each key prop is, distances")
 
     @field_validator("title")
     @classmethod
     def _upper(cls, v: str) -> str:
         return v.strip().upper()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _music_prompt(cls, data: object) -> object:
+        """A forgotten music prompt shouldn't cost a whole plan: take the model's other spelling,
+        or a neutral cue that fits every episode of the format."""
+        if isinstance(data, dict) and not str(data.get("music_prompt") or "").strip():
+            alt = data.get("music") or data.get("music_style") or data.get("score")
+            data = {
+                **data,
+                "music_prompt": alt
+                if isinstance(alt, str) and alt.strip()
+                else "playful anime action score that builds to one big hit, then a short comic sting",
+            }
+        return data
 
 
 class JobStatus(StrEnum):

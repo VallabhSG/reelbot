@@ -135,7 +135,7 @@ METHOD (how the most-watched creator in this niche works)
   behind the face, heart eyes, a giant sweat drop, steam from the ears.
 - THE CHALLENGER'S ENTRANCE: early on, one low-angle extreme close-up of the hero gearing up like a
   fighter before a boss (tying her hair back, cracking her knuckles, a glint across her glasses,
-  her sneakers planting on the ground), then cut wide. One second is enough. A strong version is a
+  her sneakers planting on the ground; never by touching her clothes), then cut wide. One second is enough. A strong version is a
   REFLECTION that holds both fighters in one frame: the boss reflected in her glasses, or her face
   reflected in the boss itself (the phone's black screen, the microwave door, the train window).
   Another is an EYE MATCH CUT: shot 1 ends on the problem's round shape (the battery ring, the
@@ -178,6 +178,10 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
   and one WS/EWS.
 - motif: ONE small object or colour (e.g. "a red hair tie", "the green exit light") that appears in
   at least two shots and pays off in the climax or twist. It ties the cuts together.
+- layout: the fixed geography of the location, 30-60 words: where every prop that matters is and
+  how far apart ("the wall outlet is low on the LEFT wall, two metres from the sofa; the charger
+  cable is one metre long, too short to reach the sofa; the floor lamp stands right of the sofa").
+  Every shot keeps it; the action never moves a prop that isn't picked up on screen.
 - opening_frame: the very first frame as a still image: where each character is, pose, what is in
   frame, framing. It must match shot 1 and show EVERY character who appears anywhere in the episode
   (a small background presence is fine): the video is generated from this frame.
@@ -196,8 +200,20 @@ STORYBOARD RULES
 - camera: exactly ONE physical move per shot: "static locked-off", "slow push-in", "fast push-in",
   "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "handheld follow",
   "whip pan", "slow-motion speed ramp" (climax only).
-- action: ONE action with a concrete verb and a visible end state, max 25 words. Refer to cast by
-  name only. No dialogue, no thoughts, no text, no signs.
+- action: the shot's movement written out beat by beat like a director's note, 30-60 words: who
+  moves which body part, which way on screen, how fast, what it touches, and the exact pose it ends
+  in. Refer to cast by name only. No dialogue, no thoughts, no text, no signs.
+- framing: where everyone and every key prop sits in the frame as the shot starts, 15-35 words
+  ("Juno lower-left third facing right, the wall outlet upper right, Mochi asleep bottom centre").
+- performance: the acting: face and body, plus secondary motion (eyes snap wide, teeth gritted,
+  hoodie strings swinging, hair whipping back, popcorn hanging in the air), 10-30 words.
+- fx: the anime effect drawn in the picture this shot, if any (speed lines, a red power aura, an
+  impact flash, a giant sweat drop), else "".
+- WARDROBE IS LOCKED: nobody ever takes off, adds or swaps any clothing, at any point (gearing up
+  is hands, hair, eyes and stance, never clothes). Props stay where the layout puts them.
+- THE GAG READS ON SCREEN: a viewer with the sound off must see the cause, the move and the
+  punchline. When the joke is a measure (too short, too late, too small), show the measure itself
+  (the cable pulled taut, the phone stopping a hand's width short of her face).
 - Every action must be literally drawable: a physical action with visible objects. Never abstract
   verbs (hack, outsmart, decide, realise, plan, figure out) and never a prop, gadget or power that
   wasn't visible earlier: anything that matters appears in the opening frame or an earlier shot.
@@ -220,10 +236,10 @@ STORYBOARD RULES
 Respond with JSON only:
 {{"title": str (1-2 words, max 14 chars), "category": str, "emoji": str, "logline": str, "hook": str,
   "location": {{"name": str, "plate_prompt": str}},
-  "winning_move": str, "direction": str, "motif": str, "opening_frame": str,
+  "winning_move": str, "direction": str, "motif": str, "opening_frame": str, "layout": str,
   "shots": [{{"beat": str, "seconds": int, "size": str, "angle": str, "camera": str, "cast": [str],
-              "action": str, "line": str, "speaker": str, "ends": str, "sound": str,
-              "light": str}}, ... exactly {n}],
+              "framing": str, "action": str, "performance": str, "fx": str,
+              "line": str, "speaker": str, "ends": str, "sound": str, "light": str}}, ... exactly {n}],
   "music_prompt": str}}"""
 
 

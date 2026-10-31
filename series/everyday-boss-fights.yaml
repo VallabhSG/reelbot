@@ -30,18 +30,21 @@ style:
 characters:
   - name: Juno
     short: "teal-haired girl in an oversized mustard hoodie"
+    look: "short messy teal bob, amber eyes, band-aid on her left cheek, oversized mustard-yellow hoodie, black cargo shorts, chunky white high-top sneakers"
     description: >
       Juno, a young woman in her early 20s with a short messy teal bob, amber eyes, a small band-aid on
       her left cheek, an oversized mustard-yellow hoodie with no logo, black cargo shorts and chunky white
       high-top sneakers; slim, energetic, expressive
   - name: Mochi
     short: "chubby orange tabby cat with a red scarf"
+    look: "chubby orange tabby, white paws, tiny red knitted scarf, half-lidded unimpressed eyes"
     description: >
       Mochi, a chubby orange tabby cat with white paws, a tiny red knitted scarf and a permanently
       unimpressed half-lidded expression
     speaks: false        # a cat: sounds only, never lines
   - name: Ren
     short: "curly-haired young man in round glasses and a green bomber jacket"
+    look: "soft dark curly hair, round wire glasses, forest-green bomber jacket over a plain white tee, light-wash jeans, white canvas sneakers"
     description: >
       Ren, Juno's crush, a young man in his mid-20s with warm brown skin, soft dark curly hair, round
       wire-rimmed glasses, a forest-green bomber jacket over a plain white tee, light-wash jeans and
@@ -280,6 +283,9 @@ models:
       cost_per_second: 0.16
       ref_token: ""
       start_frame: true
+      # Long director-level prompts (up to ~1,500 words). ByteDance accepts far more; the cap only
+      # trims sounds/acting first if a plan runs long. Shared with the fallback below.
+      max_prompt_chars: 9000
     # The same model on Higgsfield (~$0.30/s, twice the price): set take.model to seedance2_hf to
     # switch back, e.g. if OpenRouter is down.
     seedance2_hf:
@@ -295,6 +301,7 @@ models:
       cost_per_second: 0.31
       ref_token: ""
       start_frame: true
+      max_prompt_chars: 9000
     # Seedance 2.5 reference-to-video: what the top accounts in this niche credit (dyyhoang_aiker,
     # kenai.film). Gets the location plate + character sheets as references, like their published
     # prompts ("use image 1 as the location reference..."). 4-30 s. ~$0.56/s list at 720p.

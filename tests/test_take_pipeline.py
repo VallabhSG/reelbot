@@ -354,3 +354,21 @@ def test_budget_stops_are_never_retried_on_the_fallback(dry_settings, take_serie
     with pytest.raises(BudgetExceeded):
         app.pipeline._take_with_fallback("kling3", {}, 1)
     assert calls == ["kling3"]
+
+
+@needs_ffmpeg
+def test_the_prompt_fits_the_fallback_models_limit_too(dry_settings, take_series):
+    take_series.models.takes["kling3"].fallback = "seedance2"
+    take_series.models.takes["kling3"].max_prompt_chars = 0
+    take_series.models.takes["seedance2"].max_prompt_chars = 900
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    real, prompts = p.media.take, []
+
+    def spy(name, ctx, job_id):
+        prompts.append(ctx["prompt"])
+        return real(name, ctx, job_id)
+
+    p.media.take = spy
+    p.generate(p.plan_next())
+    assert prompts and all(len(x) <= 900 for x in prompts)

@@ -14,6 +14,9 @@ class Character(BaseModel):
     name: str
     description: str  # full design, used for the one-time character sheet
     short: str = ""  # a few words repeated in every shot prompt next to the reference tag
+    # the exact look, repeated in EVERY shot of a one-take prompt so the model can't redraw the
+    # character after a cut (it only sees the first frame): hair, outfit, colours
+    look: str = ""
     reference_images: list[Path] = Field(default_factory=list)  # optional hand-made refs (else: cast)
     speaks: bool = True  # False: never gets a spoken line (e.g. the cat)
 

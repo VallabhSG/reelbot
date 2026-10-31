@@ -247,7 +247,19 @@ def compose_take_prompt(
         loc += f" Screen direction: {plan.direction}, kept in every shot."
     if plan.motif:
         loc += f" Recurring detail: {plan.motif}."
-    blocks += [loc, sep]
+    blocks.append(loc)
+    if plan.layout:
+        blocks.append(
+            f"[LAYOUT, fixed in every shot] {plan.layout.strip().rstrip('.')}. Nothing moves unless a "
+            "character picks it up on screen."
+        )
+    if cast:
+        blocks.append(
+            "[CONTINUITY] Every character wears exactly the outfit described above in every shot: "
+            "nobody takes off, adds or changes any clothing, ever. Same hair, same colours, same props "
+            "in hand. Each shot starts exactly where the previous one ended."
+        )
+    blocks.append(sep)
 
     spoken = any(s.line for s in plan.shots)
     audio = "[AUDIO] Synced sound effects for every action"
@@ -281,14 +293,29 @@ def compose_take_prompt(
         + "Slow to fast, a burst on that move, one quiet beat, then the ending.",
     ]
 
-    def shot_list(sound: bool, ends: bool) -> tuple[list[str], list[dict[str, object]]]:
+    def who(name: str, look: str) -> str:
+        """The name plus the look, in every shot: the model only sees the first frame, so after a
+        cut it redraws everyone from these words. look: "full", "short" or "" (name only)."""
+        c = chars.get(name)
+        text = ((c.look if look == "full" else "") or c.short) if c and look else ""
+        text = text.strip().rstrip(".")
+        return f"{name} ({text}, unchanged)" if text else name
+
+    def shot_list(
+        sound: bool, ends: bool, acting: bool = True, look: str = "full"
+    ) -> tuple[list[str], list[dict[str, object]]]:
         lines, shots, light = [], [], plan.shots[0].light if plan.shots else ""
         for i, (s, t0) in enumerate(zip(plan.shots, shot_starts(plan), strict=True), 1):
-            subj = ", ".join(s.cast)
+            subj = ", ".join(who(n, look) for n in s.cast)
             act = s.action.strip().rstrip(".")
-            body = f"{SIZE_TEXT[s.size]}, {s.angle}, {s.camera}. " + (
-                f"{subj}: {act}." if subj else f"{act}."
-            )
+            body = f"{SIZE_TEXT[s.size]}, {s.angle}, {s.camera}. "
+            if s.framing:
+                body += f"Framing: {s.framing.strip().rstrip('.')}. "
+            body += f"{subj}: {act}." if subj else f"{act}."
+            if acting and s.performance:
+                body += f" Acting: {s.performance.strip().rstrip('.')}."
+            if acting and s.fx:
+                body += f" Effect: {s.fx.strip().rstrip('.')}."
             if s.line:
                 body += f' {s.speaker} says: "{s.line.strip()}"'
             if ends and s.ends and i < len(plan.shots):
@@ -304,10 +331,19 @@ def compose_take_prompt(
         return lines, shots
 
     global_prompt = "\n".join([" ".join(head), *blocks, *[t for t in tail if t]])
-    # Over the model's limit: drop the least important detail first (per-shot sounds, then end
-    # states; the shot list itself is never cut), then trim the global sections.
-    for sound, ends in ((True, True), (False, True), (False, False)):
-        lines, shots = shot_list(sound, ends)
+    # Over the model's limit: drop the least important detail first (per-shot sounds, then acting
+    # and effects, then end states, then the looks; camera, framing and action are never
+    # cut), then trim the global sections.
+    levels = (
+        (True, True, True, "full"),
+        (False, True, True, "full"),
+        (False, True, False, "full"),
+        (False, False, False, "full"),
+        (False, False, False, "short"),
+        (False, False, False, ""),
+    )
+    for sound, ends, acting, look in levels:
+        lines, shots = shot_list(sound, ends, acting, look)
         prompt = "\n".join([" ".join(head), *blocks, *lines, *[t for t in tail if t]])
         if not max_chars or len(prompt) <= max_chars:
             break

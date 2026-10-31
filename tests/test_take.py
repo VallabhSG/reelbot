@@ -290,3 +290,89 @@ def test_unscripted_episode_picks_a_famous_movie_moment():
     s.episodes = []
     up = Planner(None, s).user_prompt(3, [])
     assert "pick the ONE famous movie moment" in up and "a western standoff; bullet time" in up
+
+
+def test_near_miss_shot_sizes_and_beats_are_accepted():
+    from reelbot.models import ShotPlan
+
+    base = {"angle": "low angle", "camera": "slow push-in", "action": "Juno grabs the cable", "light": "warm"}
+    for size, want in [
+        ("extreme close-up", "ECU"),
+        ("Close Up", "CU"),
+        ("medium shot", "MS"),
+        ("ecu", "ECU"),
+    ]:
+        assert ShotPlan(beat="hook", size=size, **base).size == want
+    for beat, want in [("Escalation", "escalate"), ("payoff", "twist"), ("CLIMAX", "climax")]:
+        assert ShotPlan(beat=beat, size="WS", **base).beat == want
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ShotPlan(beat="hook", size="dutch tilt", **base)
+
+
+def test_a_missing_music_prompt_does_not_sink_the_plan():
+    from reelbot.models import EpisodePlan
+
+    raw = {
+        "title": "low battery",
+        "category": "2% Battery",
+        "logline": "l",
+        "hook": "h",
+        "location": {"name": "living room", "plate_prompt": "a cosy living room in the evening, sofa"},
+        "shots": [
+            {
+                "beat": "hook",
+                "size": "WS",
+                "angle": "eye level",
+                "camera": "static",
+                "action": "the phone dies",
+                "light": "warm",
+            }
+        ],
+    }
+    assert "anime" in EpisodePlan.model_validate(raw).music_prompt
+    assert EpisodePlan.model_validate({**raw, "music": "lofi drums"}).music_prompt == "lofi drums"
+
+
+def _directed_plan():
+    shots = []
+    for b, s, sec in zip(
+        default_beats(6), ("WS", "MCU", "ECU", "MS", "CU", "WS"), (2, 2, 2, 2, 4, 3), strict=True
+    ):
+        shot = _shot(b, s, sec)
+        shot |= {
+            "framing": "Kai lower-left third facing right, the gate upper right",
+            "performance": "eyes snap wide, jaw set, jacket hem flapping",
+            "fx": "speed lines" if b == "clash" else "",
+        }
+        shots.append(shot)
+    return _plan(
+        layout="the gates stand on the RIGHT, the ticket machine on the LEFT wall, three metres apart",
+        shots=shots,
+    )
+
+
+def test_director_prompt_restates_the_look_in_every_shot_and_locks_the_wardrobe(take_series):
+    take_series.characters[0].look = "spiky black hair, red track jacket, grey joggers"
+    plan = normalise(take_series, _directed_plan())
+    p = compose_take_prompt(take_series, plan, "", start_frame=True).prompt
+    shot_lines = [ln for ln in p.splitlines() if ln.startswith("[") and "s | " in ln]
+    assert len(shot_lines) == len(plan.shots)
+    assert all("Kai (spiky black hair, red track jacket, grey joggers, unchanged)" in ln for ln in shot_lines)
+    assert all("Framing: Kai lower-left third" in ln and "Acting: eyes snap wide" in ln for ln in shot_lines)
+    assert "Effect: speed lines" in p
+    assert "[LAYOUT, fixed in every shot] the gates stand on the RIGHT" in p
+    assert "[CONTINUITY]" in p and "nobody takes off, adds or changes any clothing" in p
+
+
+def test_director_prompt_trims_acting_before_end_states_and_never_framing(take_series):
+    take_series.characters[0].look = "spiky black hair, red track jacket, grey joggers"
+    plan = normalise(take_series, _directed_plan())
+    full = compose_take_prompt(take_series, plan, "", start_frame=True).prompt
+    no_sound = full.replace(" Sound: sneakers squeak on wet tiles.", "")
+    p = compose_take_prompt(take_series, plan, "", start_frame=True, max_chars=len(no_sound) - 10).prompt
+    assert "Sound:" not in p and "Acting:" not in p and "Ends on:" in p and "Framing:" in p
+    tight = compose_take_prompt(take_series, plan, "", start_frame=True, max_chars=1500).prompt
+    assert len(tight) <= 1500 and "Framing:" in tight

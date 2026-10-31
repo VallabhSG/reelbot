@@ -512,7 +512,10 @@ class Pipeline:
         name = self.take_model_for(job_id)
         spec = self.s.models.takes[name]
         keyframe = self._keyframe(job_id, plan) if spec.start_frame else None
-        tp = compose_take_prompt(self.s, plan, spec.ref_token, spec.start_frame, spec.max_prompt_chars)
+        # the fallback gets the same prompt, so it has to fit both limits
+        fb = self.s.models.takes.get(spec.fallback) if spec.fallback else None
+        caps = [c for c in (spec.max_prompt_chars, fb.max_prompt_chars if fb else 0) if c]
+        tp = compose_take_prompt(self.s, plan, spec.ref_token, spec.start_frame, min(caps, default=0))
         cast_urls = self.cast_urls()
         refs = [
             keyframe if r == "opening" else self._plate(job_id, plan) if r == "location" else cast_urls[r]
