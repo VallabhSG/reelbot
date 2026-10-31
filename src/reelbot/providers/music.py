@@ -40,11 +40,7 @@ class ElevenLabsMusic:
     def __init__(self, api_key: str, spec: MusicSpec, guard: BudgetGuard):
         if not api_key:
             raise ValueError("ELEVENLABS_API_KEY is required for music.provider=elevenlabs")
-        try:
-            from elevenlabs.client import ElevenLabs
-        except ImportError as e:  # pragma: no cover
-            raise RuntimeError("install the music extra: pip install 'reelbot[music]'") from e
-        self.client = ElevenLabs(api_key=api_key)
+        self._client: Any = None  # the SDK, loaded on first use (the composition plan doesn't need it)
         self.api_key = api_key
         self.spec = spec
         self.guard = guard
@@ -84,6 +80,16 @@ class ElevenLabsMusic:
                     f.write(chunk)
         self.guard.record("elevenlabs", "music.compose", self.spec.cost_per_track, job_id)
         return dest
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            try:
+                from elevenlabs.client import ElevenLabs
+            except ImportError as e:  # pragma: no cover
+                raise RuntimeError("install the music extra: pip install 'reelbot[music]'") from e
+            self._client = ElevenLabs(api_key=self.api_key)
+        return self._client
 
     def _compose_plan(self, chunks: list[dict[str, Any]], seed: int) -> bytes:
         """One section per story beat (music_plan.py): the newer music models take a composition

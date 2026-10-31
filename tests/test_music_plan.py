@@ -37,6 +37,19 @@ def test_a_deadpan_episode_ends_on_a_dead_stop_and_a_short_end_merges_back(take_
     assert all(c["duration_ms"] >= MIN_MS for c in chunks)
 
 
+class SDK:
+    """Stands in for the ElevenLabs SDK (not installed in CI): records the prompt compose."""
+
+    def __init__(self, audio: bytes):
+        self.asked: dict = {}
+        self.music = self
+        self.audio = audio
+
+    def compose(self, **kw):
+        self.asked.update(kw)
+        return self.audio
+
+
 class Guard:
     def check(self, cost, job_id):
         pass
@@ -67,13 +80,8 @@ def test_a_refused_plan_still_gets_a_track_from_the_prompt(tmp_path, take_series
         return_value=httpx.Response(403, json={"detail": "plan"})
     )
     music = ElevenLabsMusic("k", MusicSpec(), Guard())
-    asked = {}
-
-    def compose(**kw):
-        asked.update(kw)
-        return b"fallback"
-
-    monkeypatch.setattr(music.client.music, "compose", compose)
+    music._client = sdk = SDK(b"fallback")
+    asked = sdk.asked
     chunks = music_chunks(take_series, normalise(take_series, _plan()), triumph=True)
     out = music.track("lofi", 15, tmp_path / "m.mp3", 1, seed=7, chunks=chunks)
     assert out.read_bytes() == b"fallback" and asked["prompt"] == "lofi" and asked["force_instrumental"]
@@ -82,6 +90,6 @@ def test_a_refused_plan_still_gets_a_track_from_the_prompt(tmp_path, take_series
 @pytest.mark.parametrize("composition", [False])
 def test_composition_can_be_switched_off(tmp_path, take_series, monkeypatch, composition):
     music = ElevenLabsMusic("k", MusicSpec(composition=composition), Guard())
-    monkeypatch.setattr(music.client.music, "compose", lambda **kw: b"prompt")
+    music._client = SDK(b"prompt")
     chunks = music_chunks(take_series, normalise(take_series, _plan()), triumph=True)
     assert music.track("lofi", 15, tmp_path / "m.mp3", 1, seed=7, chunks=chunks).read_bytes() == b"prompt"
