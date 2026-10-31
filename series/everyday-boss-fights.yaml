@@ -264,6 +264,7 @@ models:
     seedance2:
       label: "Seedance 2.0"
       provider: openrouter
+      fallback: seedance2_hf   # OpenRouter down or refusing: same model on Higgsfield (~2x the price)
       endpoint: "bytedance/seedance-2.0"
       input:
         prompt: "{prompt}"
@@ -331,7 +332,7 @@ title_card:
 
 caption:
   template: "{header}\n\n{hook}\n\n{credits}\n\n{hashtags}"
-  credits: "Animated with {model} · frames on Higgsfield · music by @elevenlabs"
+  credits: "AI-animated with {model} · frames on Higgsfield · music by @elevenlabs"
   # Instagram allows 5 since Dec 2025 (1-2 broad, 1-2 medium, 1 niche); keywords in the caption
   # matter more for search now
   hashtags: ["#anime", "#relatable", "#aianimation", "#aishortfilm", "#bossfight"]
@@ -343,6 +344,10 @@ caption:
       link_text: "🎨 Frames made on Higgsfield (affiliate link): {url}"
     - url: "https://try.elevenlabs.io/8k8afoea9y48"
       link_text: "🎵 Music by ElevenLabs (affiliate link): {url}"
+
+facebook:
+  # Meta's "AI info" label on every reel: label ourselves before Instagram/Facebook make us
+  ai_label: true
 
 budget:
   monthly_usd: 40

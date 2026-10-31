@@ -179,6 +179,75 @@ def planner_guidance(db: DB) -> str:
     return "\n".join(lines)
 
 
+REMATCH_FACTOR = 2.0  # a hit: at least this many times the median views of the other reels
+REMATCH_WINDOW = timedelta(days=10)  # only recent hits get a rematch
+REMATCH_MIN_REELS = 4  # the hit plus at least 3 others to take a median from
+
+
+@dataclass
+class Hit:
+    job_id: int
+    plan: EpisodePlan
+    platform: str
+    views: float
+    median: float
+
+    def line(self) -> str:
+        name = PLATFORM_NAMES.get(self.platform, self.platform)
+        return (
+            f"#{self.job_id} {self.plan.title} ({self.plan.category}): {int(self.views):,} views on {name}, "
+            f"{self.views / max(self.median, 1):.1f}x the median"
+        )
+
+
+def rematch_candidate(db: DB, now: datetime | None = None) -> Hit | None:
+    """The biggest recent hit that hasn't had its rematch yet (and isn't a rematch itself): a reel
+    with at least REMATCH_FACTOR x the median views of the others on the same platform."""
+    now = now or datetime.now(UTC)
+    views: dict[str, dict[int, float]] = {}
+    for job_id, m in db.metrics().items():
+        if "views" in m["data"]:
+            views.setdefault("instagram", {})[job_id] = float(m["data"]["views"])
+    for (job_id, platform), m in db.platform_metrics().items():
+        if "views" in m["data"]:
+            views.setdefault(platform, {})[job_id] = float(m["data"]["views"])
+    jobs = {j["id"]: j for j in db.jobs_with_status(JobStatus.PUBLISHED)}
+    best: Hit | None = None
+    for platform, per_job in views.items():
+        per_job = {j: v for j, v in per_job.items() if j in jobs}
+        if len(per_job) < REMATCH_MIN_REELS:
+            continue
+        for job_id, v in per_job.items():
+            job = jobs[job_id]
+            published = _parse_time(job["publish_after"]) or _parse_time(job["updated_at"])
+            if not published or now - published > REMATCH_WINDOW:
+                continue
+            if db.kv_get(f"rematch:{job_id}") or db.kv_get(f"rematch_of:{job_id}"):
+                continue
+            typical = median(x for j, x in per_job.items() if j != job_id)
+            if v < REMATCH_FACTOR * max(typical, 1.0):
+                continue
+            try:
+                plan = EpisodePlan.model_validate_json(job["plan_json"])
+            except Exception:
+                continue
+            hit = Hit(job_id, plan, platform, v, typical)
+            if best is None or v / max(median, 1) > best.views / max(best.median, 1):
+                best = hit
+    return best
+
+
+def rematch_brief(hit: Hit) -> str:
+    p = hit.plan
+    return (
+        f'REMATCH: this episode is the rematch of a hit, "{p.title}" ({p.category}): {p.logline} '
+        f"Winning move then: {p.winning_move or '-'}. Bring back the SAME boss ({p.category}) and a "
+        "recognisably similar setting, one notch harder (the stakes doubled, the boss evolved, the old "
+        "winning move no longer enough), and a new winning move. New title. This deliberate rematch "
+        "overrides the rule against repeating a premise."
+    )
+
+
 PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube", "facebook": "Facebook"}
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 

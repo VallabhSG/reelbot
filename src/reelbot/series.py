@@ -90,6 +90,9 @@ class ModelSpec(BaseModel):
     # v3: True = the model starts from the composed opening frame (image-to-video); False = it gets
     # the location plate + character sheets as references (reference-to-video, image 1 = location)
     start_frame: bool = False
+    # v3: another key in models.takes to make the take with when this one fails (provider down,
+    # rejected request); the fallback costs what it costs, under the same budget guard
+    fallback: str = ""
 
     def estimate(self, seconds: float = 0.0) -> float:
         return round(self.cost_per_call + self.cost_per_second * seconds, 4)
@@ -133,6 +136,10 @@ class TakeSpec(BaseModel):
     # Boss name card: a fighting-game title over the opening ("SNOOZE BUTTON / FINAL BOSS") for a
     # moment, in the title-card font and colours. Set boss_card_s to 0 to turn it off.
     boss_card_label: str = "FINAL BOSS"
+    boss_card_rematch_label: str = "REMATCH"
+    # Rematch the hits: when a recent reel gets 2x the median views of the others on a platform,
+    # the next unscripted episode is that boss's rematch, one notch harder
+    rematch: bool = True
     boss_card_from_s: float = 0.4
     boss_card_s: float = Field(1.3, ge=0, le=3)
     boss_card_y_ratio: float = Field(0.2, ge=0.05, le=0.9)

@@ -136,6 +136,11 @@ METHOD (how the most-watched creator in this niche works)
   her sneakers planting on the ground), then cut wide. One second is enough. A strong version is a
   REFLECTION that holds both fighters in one frame: the boss reflected in her glasses, or her face
   reflected in the boss itself (the phone's black screen, the microwave door, the train window).
+  Another is an EYE MATCH CUT: shot 1 ends on the problem's round shape (the battery ring, the
+  clock face, the circled F) centred in the upper third, one third of the frame wide; the next shot
+  is an extreme close-up of the hero's eye with the iris in exactly that spot and size, the problem
+  reflected in her pupil as the boss-mode light flares. Write that position and size in words in
+  BOTH shots.
 - THE TURN IS AN INSERT: the winning move starts on a tight insert of a hand on the one object that
   matters (a thumb pressing the key fob, fingers closing on the plug, a finger over the snooze
   button), then cut wide to what it causes.

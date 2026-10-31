@@ -318,3 +318,39 @@ def test_every_other_episode_ends_in_a_triumph(take_series):
     take_series.take.endings = "deadpan"
     assert ENDING_TRIUMPH not in planner.user_prompt(2, [])
     assert "COLOUR CODE THE FIGHT" in planner.system_prompt()
+
+
+@needs_ffmpeg
+def test_a_failed_take_falls_back_to_the_backup_model(dry_settings, take_series):
+    take_series.models.takes["kling3"].fallback = "seedance2"
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    real = p.media.take
+
+    def flaky(name, ctx, job_id):
+        if name == "kling3":
+            raise RuntimeError("provider down")
+        return real(name, ctx, job_id)
+
+    p.media.take = flaky
+    job = p.plan_next()
+    out = p.generate(job)
+    assert out.exists()
+    assert any("provider down" in m and "Seedance 2.0" in m for m in p.notifier.sent)
+
+
+def test_budget_stops_are_never_retried_on_the_fallback(dry_settings, take_series):
+    from reelbot.budget import BudgetExceeded
+
+    take_series.models.takes["kling3"].fallback = "seedance2"
+    app = _app(dry_settings, take_series)
+    calls = []
+
+    def broke(name, ctx, job_id):
+        calls.append(name)
+        raise BudgetExceeded("cap")
+
+    app.pipeline.media.take = broke
+    with pytest.raises(BudgetExceeded):
+        app.pipeline._take_with_fallback("kling3", {}, 1)
+    assert calls == ["kling3"]

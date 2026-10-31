@@ -263,3 +263,44 @@ def test_note_lessons_and_stats_commands(dry_settings, monkeypatch, capsys):
     assert build(dry_settings).db.feedback()[0]["text"] == "payoff unclear"
     assert main(["stats"]) == 0
     assert "views" in capsys.readouterr().out
+
+
+def _published_job(app, views_ig, title, days_ago=1):
+    from datetime import UTC, datetime, timedelta
+
+    plan = app.pipeline.planner.plan(app.db.next_episode_no(), [])
+    plan = plan.model_copy(update={"title": title, "category": f"{title} Boss"})
+    jid = app.db.create_job(app.db.next_episode_no(), plan)
+    when = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat()
+    app.db.update_job(jid, status=JobStatus.PUBLISHED, publish_after=when)
+    app.db.save_metrics(jid, f"m{jid}", {"views": float(views_ig)})
+    return jid
+
+
+def test_a_hit_gets_a_rematch_once(dry_settings):
+    from reelbot.learn import rematch_candidate
+
+    app = build(dry_settings)
+    for i, v in enumerate([400, 500, 600]):
+        _published_job(app, v, f"MEH{i}")
+    assert rematch_candidate(app.db) is None  # nothing stands out
+    hit = _published_job(app, 2000, "BANGER")
+    found = rematch_candidate(app.db)
+    assert found and found.job_id == hit and found.views == 2000 and found.median == 500
+    job = app.pipeline.plan_next()
+    assert app.db.kv_get(f"rematch_of:{job}") == str(hit) and app.db.kv_get(f"rematch:{hit}") == str(job)
+    assert any("rematch of a hit" in m and "BANGER" in m for m in app.pipeline.notifier.sent)
+    assert rematch_candidate(app.db) is None  # never twice
+    assert app.pipeline._boss_card(job, app.db.plan(job)).exists()
+
+
+def test_old_hits_and_small_samples_get_no_rematch(dry_settings):
+    from reelbot.learn import rematch_candidate
+
+    app = build(dry_settings)
+    _published_job(app, 400, "A")
+    _published_job(app, 3000, "OLD", days_ago=30)
+    assert rematch_candidate(app.db) is None  # too few reels to call anything a hit
+    _published_job(app, 500, "B")
+    _published_job(app, 600, "C")
+    assert rematch_candidate(app.db) is None  # the big one is a month old

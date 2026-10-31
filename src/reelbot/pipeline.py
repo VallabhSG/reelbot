@@ -37,7 +37,7 @@ from .assemble import (
 from .budget import BudgetExceeded, BudgetGuard
 from .db import DB
 from .facebook import reel_url
-from .learn import Learner, planner_guidance
+from .learn import Learner, planner_guidance, rematch_brief, rematch_candidate
 from .models import EpisodePlan, JobStatus
 from .planner import Planner
 from .providers import MediaProvider
@@ -202,8 +202,17 @@ class Pipeline:
         n = self.db.next_episode_no()
         if n > self.s.series.total_episodes:
             raise RuntimeError(f"series complete ({self.s.series.total_episodes} episodes)")
-        plan = self.planner.plan(n, self.db.past_titles(), guidance=planner_guidance(self.db))
+        guidance = planner_guidance(self.db)
+        seed = self.s.episodes[n - 1] if 0 < n <= len(self.s.episodes) else None
+        hit = rematch_candidate(self.db) if self.s.take.rematch and not (seed and seed.scripted) else None
+        if hit:
+            guidance = f"{rematch_brief(hit)}\n{guidance}".strip()
+        plan = self.planner.plan(n, self.db.past_titles(), guidance=guidance)
         job_id = self.db.create_job(n, plan)
+        if hit:
+            self.db.kv_set(f"rematch:{hit.job_id}", str(job_id))
+            self.db.kv_set(f"rematch_of:{job_id}", str(hit.job_id))
+            self.notifier.send_message(f"🔁 #{job_id} is the rematch of a hit: {hit.line()}")
         model = self.active_take_model() if self.s.take.enabled else None
         if model:
             self.db.kv_set(f"take_model:{job_id}", model)
@@ -346,8 +355,9 @@ class Pipeline:
         tc, t = self.s.title_card, self.s.take
         font = self.s.resolve(tc.font) if tc.font else None
         spec = tc.model_copy(update={"y_ratio": t.boss_card_y_ratio})
+        label = t.boss_card_rematch_label if self.db.kv_get(f"rematch_of:{job_id}") else t.boss_card_label
         return render_title_card(
-            plan.category.strip().upper(), t.boss_card_label, spec, font, self._dir(job_id) / "boss_card.png"
+            plan.category.strip().upper(), label, spec, font, self._dir(job_id) / "boss_card.png"
         )
 
     @staticmethod
@@ -436,6 +446,26 @@ class Pipeline:
         n = self.db.get_job(job_id)["episode_no"]
         return self.s.episodes[n - 1] if 0 < n <= len(self.s.episodes) else None
 
+    def _take_with_fallback(self, name: str, ctx: dict[str, Any], job_id: int) -> str:
+        """Make the take on `name`; if that fails for any reason but the budget, make it on the
+        model's `fallback` (e.g. Seedance 2.0 on OpenRouter -> the same model on Higgsfield)."""
+        spec = self.s.models.takes[name]
+        try:
+            return self.media.take(name, ctx, job_id)
+        except BudgetExceeded:
+            raise
+        except Exception as e:
+            fb = spec.fallback
+            if not fb or fb not in self.s.models.takes:
+                raise
+            label = self.s.models.takes[fb].label or fb
+            log.warning("take on %s failed for job %d (%s); falling back to %s", name, job_id, e, fb)
+            self.notifier.send_message(
+                f"⚠️ #{job_id}: {spec.label or name} via {spec.provider} failed ({str(e)[:200]}). "
+                f"Making it with {label} via {self.s.models.takes[fb].provider} instead."
+            )
+            return self.media.take(fb, ctx, job_id)
+
     def _render_take(self, job_id: int, plan: EpisodePlan) -> Path:
         name = self.take_model_for(job_id)
         spec = self.s.models.takes[name]
@@ -456,7 +486,7 @@ class Pipeline:
                 "location and style.\n" + prompt
             )
         seconds = sum(s.seconds for s in plan.shots)
-        url = self.media.take(
+        url = self._take_with_fallback(
             name,
             {
                 "prompt": prompt,
