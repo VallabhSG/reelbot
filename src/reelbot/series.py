@@ -79,6 +79,8 @@ class SeriesMeta(BaseModel):
 class Style(BaseModel):
     bible: str
     negative: str = ""
+    # how it MOVES (the animation technique), stated once in a one-take prompt
+    animation: str = ""
     motion_suffix: str = ""
 
 
@@ -148,6 +150,9 @@ class TakeSpec(BaseModel):
     endings: Literal["alternate", "deadpan"] = "alternate"
     # Boss name card: a fighting-game title over the opening ("SNOOZE BUTTON / FINAL BOSS") for a
     # moment, in the title-card font and colours. Set boss_card_s to 0 to turn it off.
+    # the director's pass: after planning, write the set, the first-frame blocking and every shot
+    # out in full (director.py). Free on Groq; ~6 short calls per episode.
+    director: bool = True
     boss_card_label: str = "FINAL BOSS"
     boss_card_rematch_label: str = "REMATCH"
     # Rematch the hits: when a recent reel gets 2x the median views of the others on a platform,

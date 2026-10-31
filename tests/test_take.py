@@ -1,5 +1,7 @@
 """v3 one-take: storyboard rules, prompt composition, config validation."""
 
+import re
+
 import pytest
 
 from reelbot.models import BEATS, EpisodePlan
@@ -109,13 +111,14 @@ def test_reference_prompt_maps_location_then_cast_and_lists_timed_cuts(take_seri
     assert tp.prompt.startswith("Use image 1 as the location reference, image 2 as the Kai reference.")
     assert "[CHARACTER: Kai] (reference image 2) Keep: Kai, a lanky courier" in tp.prompt
     assert "[LOCATION] (reference image 1) an empty metro ticket hall at night." in tp.prompt
-    lines = [ln for ln in tp.prompt.splitlines() if ln.startswith("[") and "s |" in ln]
-    assert lines[0].startswith("[0-2s | HOOK] Wide shot") and lines[1].startswith("[2-4s | ESCALATE] Cut to:")
+    lines = [ln for ln in tp.prompt.splitlines() if re.match(r"Shot \d+ \(", ln)]
+    assert lines[0].startswith("Shot 1 (2 s, HOOK): Wide shot")
+    assert lines[1].startswith("Shot 2 (2 s, ESCALATE): Hard cut. ")
     assert "Screen direction: left to right" in tp.prompt and "Recurring detail: a red hair tie" in tp.prompt
     assert "Ends on: Kai lands in a crouch" in lines[0] and "Ends on" not in lines[-1]  # last shot
     assert "No speech, no dialogue, no narration, no music" in tp.prompt
     assert [s["duration"] for s in tp.shots] == [s.seconds for s in plan.shots]
-    assert "[0-2s" not in tp.global_prompt and "[CHARACTER: Kai]" in tp.global_prompt
+    assert "Shot 1 (" not in tp.global_prompt and "[CHARACTER: Kai]" in tp.global_prompt
 
 
 def test_start_frame_prompt_has_no_reference_mapping(take_series):
@@ -164,7 +167,7 @@ def test_prompt_shrinks_to_the_model_limit_without_losing_shots(take_series):
     assert "Sound:" in full and full.count("[LIGHTING]") == 1  # one scene light, stated once
     for limit in (len(full) - 50, len(full) - 400, 900):
         p = compose_take_prompt(take_series, plan, "", start_frame=True, max_chars=limit).prompt
-        assert len(p) <= limit and all(f"| {b.upper()}]" in p for b in {"hook", "climax", "twist"})
+        assert len(p) <= limit and all(f", {b.upper()}):" in p for b in {"hook", "climax", "twist"})
     p = compose_take_prompt(take_series, plan, "", start_frame=True, max_chars=len(full) - 50).prompt
     assert "Sound:" not in p and "Ends on:" in p  # sounds go first, end states stay
 
@@ -358,13 +361,14 @@ def test_director_prompt_restates_the_look_in_every_shot_and_locks_the_wardrobe(
     take_series.characters[0].look = "spiky black hair, red track jacket, grey joggers"
     plan = normalise(take_series, _directed_plan())
     p = compose_take_prompt(take_series, plan, "", start_frame=True).prompt
-    shot_lines = [ln for ln in p.splitlines() if ln.startswith("[") and "s | " in ln]
+    shot_lines = [ln for ln in p.splitlines() if re.match(r"Shot \d+ \(", ln)]
     assert len(shot_lines) == len(plan.shots)
     assert all("Kai (spiky black hair, red track jacket, grey joggers, unchanged)" in ln for ln in shot_lines)
     assert all("Framing: Kai lower-left third" in ln and "Acting: eyes snap wide" in ln for ln in shot_lines)
     assert "Effect: speed lines" in p
     assert "[LAYOUT, fixed in every shot] the gates stand on the RIGHT" in p
-    assert "[CONTINUITY]" in p and "nobody takes off, adds or changes any clothing" in p
+    assert "[LOCKS] Wardrobe and look, identical in every shot: Kai: spiky black hair" in p
+    assert "Nobody takes off, adds or changes any clothing" in p
 
 
 def test_director_prompt_trims_acting_before_end_states_and_never_framing(take_series):

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -167,6 +168,17 @@ class StubLLM:
                 "lessons": [{"text": f"Fix: {n}", "evidence": "owner note"} for n in notes][:10]
                 or [{"text": "Open on motion in the first second.", "evidence": "stub"}]
             }
+        if "PRODUCTION DESIGNER" in system:  # the director's pass: set + blocking
+            lo = int(re.findall(r"set in (\d+)-", user)[0])
+            lb = int(re.findall(r"blocking in (\d+)-", user)[0])
+            return {
+                "set": _filler("Cold white tiles line the curved back wall under a humming strip light.", lo),
+                "blocking": _filler("She stands at x 30% in the lower third, facing right.", lb),
+            }
+        if "SHOT DIRECTOR" in system:  # the director's pass: one shot in full
+            lo = int(re.findall(r"in (\d+)-(\d+) words:", user)[-1][0])
+            n = re.findall(r"WRITE SHOT (\d+)", user)[0]
+            return {"detail": _filler(f"Shot {n}: a 35 mm lens at waist height, slow push-in.", lo)}
         if "FIRST-TIME VIEWER" in system:  # the story critic
             return {
                 "summary": "she makes the train, the cat was faster",
@@ -216,6 +228,14 @@ class StubLLM:
             ],
             "music_prompt": "slow lo-fi synth pulse, melancholic, cinematic, instrumental",
         }
+
+
+def _filler(sentence: str, words: int) -> str:
+    """A deterministic paragraph of at least `words` words."""
+    out: list[str] = []
+    while len(out) < words:
+        out += sentence.split()
+    return " ".join(out)
 
 
 def _wrap(text: str, width: int) -> str:

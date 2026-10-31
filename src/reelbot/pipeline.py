@@ -36,6 +36,7 @@ from .assemble import (
 )
 from .budget import BudgetExceeded, BudgetGuard
 from .db import DB
+from .director import Director
 from .facebook import reel_url
 from .learn import Learner, planner_guidance, rematch_brief, rematch_candidate
 from .models import EpisodePlan, JobStatus
@@ -46,6 +47,7 @@ from .providers.music import MusicProvider, NoMusic
 from .series import EpisodeSeed, Series
 from .storage import Storage
 from .storyboard import (
+    clip_text,
     compose_keyframe_prompt,
     compose_shot_prompt,
     compose_take_prompt,
@@ -124,6 +126,32 @@ class Pipeline:
         self.learner = Learner(
             db, series, planner.llm, publisher, notifier, platforms=self.crosspost_platforms, tz=guard.tz
         )
+        self.director = Director(planner.llm, series) if planner.llm is not None else None
+
+    # ================================================================== director
+    def _directed(self, plan: EpisodePlan, job_id: int | None = None) -> EpisodePlan:
+        """The director's pass (director.py): the set, the blocking and every shot written out in
+        full, once per episode, before any image is made (the plate and opening frame are drawn
+        from the same words). Never blocks the day: on failure the reel renders from the
+        storyboard alone."""
+        if not (self.s.take.enabled and self.s.take.director and self.director) or plan.world:
+            return plan
+        try:
+            directed = self.director.direct(plan)
+        except Exception as e:
+            log.exception("director pass failed")
+            tag = f"#{job_id}: " if job_id else ""
+            self.notifier.send_message(
+                f"⚠️ {tag}the director pass failed ({type(e).__name__}: {str(e)[:200]}); "
+                "rendering from the storyboard alone."
+            )
+            return plan
+        missing = [i + 1 for i, s in enumerate(directed.shots) if not s.detail]
+        if missing:
+            log.warning("director: no detail for shot(s) %s; they use the storyboard fields", missing)
+        if job_id is not None:
+            self.db.update_job(job_id, plan_json=directed.model_dump_json())
+        return directed
 
     # ================================================================== cast
     def cast_urls(self) -> dict[str, str]:
@@ -296,8 +324,9 @@ class Pipeline:
         """One location plate per episode, shared by every shot (keeps the place consistent)."""
         if url := self.db.kv_get(f"plate:{job_id}"):
             return url
+        world = f" {clip_text(plan.world, 1200)}" if plan.world else ""
         prompt = (
-            f"{plan.location.plate_prompt}. Empty environment, no people, no animals, "
+            f"{plan.location.plate_prompt}.{world} Empty environment, no people, no animals, "
             f"no readable text or signage. {self.s.style.bible}"
         )
         url = self.media.image(
@@ -653,6 +682,7 @@ class Pipeline:
                     f"no approved character sheet for {', '.join(sorted(missing))}; run cast first"
                 )
             if self.s.take.enabled:
+                plan = self._directed(plan, job_id)
                 out = self._generate_take(job_id, plan)
             else:
                 plate = self._plate(job_id, plan)
@@ -763,7 +793,7 @@ class Pipeline:
         if not self.s.take.enabled:
             raise ValueError("retake is for one-take reels; use the shot buttons")
         self.db.add_feedback(job_id, "retake", note)
-        plan = self.db.plan(job_id)
+        plan = self._directed(self.db.plan(job_id), job_id)  # older plans get the full write-up too
         self.db.update_job(job_id, status=JobStatus.GENERATING)
         try:
             self._render_take(job_id, plan)
@@ -787,6 +817,7 @@ class Pipeline:
             raise ValueError(f"unknown model(s) {unknown}; choose from {sorted(self.s.models.takes)}")
         n = self.db.next_episode_no()
         plan = self.planner.plan(n, self.db.past_titles(), guidance=planner_guidance(self.db))
+        plan = self._directed(plan)  # once: every model gets the same written-out shots
         ids = []
         for name in names:
             jid = self.db.create_job(n, plan)

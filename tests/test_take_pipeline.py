@@ -40,9 +40,9 @@ def test_one_take_cycle(dry_settings, take_series):
     takes = _calls(p, "take")
     keyframe = app.db.kv_get(f"keyframe:{job}")
     assert len(takes) == 1 and takes[0]["model"] == "kling3" and takes[0]["start_image"] == keyframe
-    assert takes[0]["duration"] == 15 and "s | TWIST] Cut to:" in takes[0]["prompt"]
+    assert takes[0]["duration"] == 15 and ", TWIST): Hard cut." in takes[0]["prompt"]
     assert [x["duration"] for x in takes[0]["shots"]] == [s.seconds for s in app.db.plan(job).shots]
-    assert "[0-" not in takes[0]["prompt_global"]  # Kling gets the shot list via multi_prompt
+    assert "Shot 1 (" not in takes[0]["prompt_global"]  # Kling gets the shot list via multi_prompt
     assert not _calls(p, "video")  # no per-shot calls in v3
 
     # the opening frame is painted from the approved sheet + the location plate
@@ -372,3 +372,42 @@ def test_the_prompt_fits_the_fallback_models_limit_too(dry_settings, take_series
     p.media.take = spy
     p.generate(p.plan_next())
     assert prompts and all(len(x) <= 900 for x in prompts)
+
+
+@needs_ffmpeg
+def test_the_director_writes_every_shot_out_before_any_image_is_made(dry_settings, take_series):
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    job = p.plan_next()
+    p.generate(job)
+    plan = app.db.plan(job)  # saved: a retake or resume reuses the same write-up
+    assert plan.world.startswith("Cold white tiles") and plan.blocking
+    assert all(s.detail.startswith(f"Shot {i}:") for i, s in enumerate(plan.shots, 1))
+    images = [c["prompt"] for c in _calls(p, "image")]
+    assert any("Empty environment" in x and "Cold white tiles" in x for x in images)  # the plate
+    assert any(x.startswith("Opening frame") and "The set: Cold white tiles" in x for x in images)
+    take = _calls(p, "take")[0]["prompt"]
+    assert "[SET, every element fixed in every shot] Cold white tiles" in take
+    assert "a 35 mm lens at waist height" in take
+
+
+@needs_ffmpeg
+def test_a_failed_director_pass_never_blocks_the_reel(dry_settings, take_series):
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+
+    def down(plan):
+        raise RuntimeError("LLM down")
+
+    p.director.direct = down
+    job = p.plan_next()
+    assert p.generate(job).exists()
+    assert any("director pass failed" in m for m in p.notifier.sent)
+    assert not app.db.plan(job).world
+
+
+def test_the_director_can_be_switched_off(dry_settings, take_series):
+    take_series.take.director = False
+    app = _app(dry_settings, take_series)
+    plan = app.db.plan(app.pipeline.plan_next())
+    assert app.pipeline._directed(plan) is plan

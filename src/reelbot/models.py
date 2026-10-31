@@ -112,6 +112,8 @@ class ShotPlan(BaseModel):
     framing: str = Field("", description="where everyone and every key prop sits in the frame")
     performance: str = Field("", description="face and body acting plus secondary motion")
     fx: str = Field("", description="the anime effect drawn in the picture, if any")
+    # written by the director's pass after planning (director.py): the whole shot in full
+    detail: str = Field("", description="the director's full description of the shot")
 
 
 class EpisodePlan(BaseModel):
@@ -129,6 +131,10 @@ class EpisodePlan(BaseModel):
     direction: str = Field("", description="screen direction kept in every shot, e.g. left to right")
     opening_frame: str = Field("", description="the first frame: who is where, pose, framing")
     layout: str = Field("", description="the fixed geography: where each key prop is, distances")
+    # written by the director's pass (director.py): every element of the set, and where everyone
+    # and every key prop stands in the opening frame
+    world: str = Field("", description="every element of the set, fixed for the episode")
+    blocking: str = Field("", description="first-frame positions, screen percentages and distances")
 
     @field_validator("title")
     @classmethod

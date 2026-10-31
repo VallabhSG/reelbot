@@ -195,9 +195,12 @@ def compose_take_prompt(
 ) -> TakePrompt:
     """v3: one prompt for the whole reel, cuts inside the generation.
 
-    Layout follows the production prompts the reference creators publish for Seedance: reference
-    mapping, one strict style block, a "keep" block per character, the location with exclusions,
-    a timecoded shot list ("Cut to"), then lighting / audio / negatives and a one-line summary.
+    Built like the long production prompts written for Seedance (Higgsfield's library, ByteDance's
+    guide): reference mapping and a one-line summary, the style and animation technique, a "keep"
+    block per character, the location, then (from the director's pass) the set element by element
+    and the first-frame blocking, the layout, the numbered shot list ("Shot 2 (3 s, CLASH): Hard
+    cut."), and physics, light, audio and positive locks to close. Shots are numbered rather than
+    timecoded: Seedance 2.0 paces numbered shots more reliably than exact timestamps.
     start_frame=True: the model starts from the composed opening frame (no other references).
     Otherwise image 1 is the location plate and the character sheets follow."""
     chars = {c.name: c for c in series.characters}
@@ -229,6 +232,8 @@ def compose_take_prompt(
         f"hard cuts, one continuous scene: {logline}.",
         "STYLE, strictly consistent in every shot: " + series.style.bible.strip().rstrip(".") + ".",
     ]
+    if series.style.animation:
+        head.append("ANIMATION: " + series.style.animation.strip().rstrip(".") + ".")
     if cast:
         head.append(
             "Characters must match their references exactly: never change faces, hair, outfits, body "
@@ -248,17 +253,15 @@ def compose_take_prompt(
     if plan.motif:
         loc += f" Recurring detail: {plan.motif}."
     blocks.append(loc)
+    if plan.world:
+        blocks.append(f"[SET, every element fixed in every shot] {plan.world.strip()}")
     if plan.layout:
         blocks.append(
             f"[LAYOUT, fixed in every shot] {plan.layout.strip().rstrip('.')}. Nothing moves unless a "
             "character picks it up on screen."
         )
-    if cast:
-        blocks.append(
-            "[CONTINUITY] Every character wears exactly the outfit described above in every shot: "
-            "nobody takes off, adds or changes any clothing, ever. Same hair, same colours, same props "
-            "in hand. Each shot starts exactly where the previous one ended."
-        )
+    if plan.blocking:
+        blocks.append(f"[FIRST FRAME AND BLOCKING] {plan.blocking.strip()}")
     blocks.append(sep)
 
     spoken = any(s.line for s in plan.shots)
@@ -269,21 +272,36 @@ def compose_take_prompt(
         if spoken
         else ". No speech, no dialogue, no narration, no music, no singing."
     )
+    locks = ""
+    if cast:
+        looks = "; ".join(f"{n}: {(chars[n].look or chars[n].short or n).strip().rstrip('.')}" for n in cast)
+        locks = (
+            f"[LOCKS] Wardrobe and look, identical in every shot: {looks}. Nobody takes off, adds or "
+            "changes any clothing, hair style or accessory, ever. "
+            f"Cast: only {', '.join(cast)}, no one else. "
+            + (f"Screen direction: {plan.direction}, in every shot. " if plan.direction else "")
+            + "Every prop stays where the set and layout put it unless a character moves it on screen; "
+            "each shot starts exactly where the previous one ended. Faces and hands stay stable and "
+            "well drawn."
+        )
+    negative = " ".join(
+        x
+        for x in [
+            series.style.negative.strip(),
+            "" if "subtitle" in series.style.negative.lower() else "No subtitles, no on-screen text.",
+        ]
+        if x
+    )
     tail = [
         sep,
+        "[PHYSICS] Hair, fabric, drawstrings, cables and tails move with weight, drag and "
+        "follow-through, then settle; every contact lands with impact; nothing floats, melts or morphs.",
         f"[LIGHTING] {plan.shots[0].light.strip().rstrip('.')}, the same in every shot."
         if plan.shots
         else "",
         audio,
-        "[NEGATIVE] "
-        + " ".join(
-            x
-            for x in [
-                series.style.negative.strip(),
-                "" if "subtitle" in series.style.negative.lower() else "No subtitles, no on-screen text.",
-            ]
-            if x
-        ),
+        locks,
+        f"[NEGATIVE] {negative}",
         f"Final effect: a tightly paced {total}-second anime short with clean hard cuts: {logline}. "
         + (
             f"Everything builds to one decisive move: {plan.winning_move.strip().rstrip('.')}. "
@@ -302,48 +320,65 @@ def compose_take_prompt(
         return f"{name} ({text}, unchanged)" if text else name
 
     def shot_list(
-        sound: bool, ends: bool, acting: bool = True, look: str = "full"
+        detail: float, sound: bool, ends: bool, acting: bool = True, look: str = "full"
     ) -> tuple[list[str], list[dict[str, object]]]:
+        """detail: the share of the director's text to keep (0 = use the storyboard fields)."""
         lines, shots, light = [], [], plan.shots[0].light if plan.shots else ""
-        for i, (s, t0) in enumerate(zip(plan.shots, shot_starts(plan), strict=True), 1):
+        for i, s in enumerate(plan.shots, 1):
             subj = ", ".join(who(n, look) for n in s.cast)
-            act = s.action.strip().rstrip(".")
             body = f"{SIZE_TEXT[s.size]}, {s.angle}, {s.camera}. "
-            if s.framing:
-                body += f"Framing: {s.framing.strip().rstrip('.')}. "
-            body += f"{subj}: {act}." if subj else f"{act}."
-            if acting and s.performance:
-                body += f" Acting: {s.performance.strip().rstrip('.')}."
-            if acting and s.fx:
-                body += f" Effect: {s.fx.strip().rstrip('.')}."
-            if s.line:
-                body += f' {s.speaker} says: "{s.line.strip()}"'
-            if ends and s.ends and i < len(plan.shots):
-                body += f" Ends on: {s.ends.strip().rstrip('.')}."
-            if s.light != light:
-                body += f" Light: {s.light.strip().rstrip('.')}."
-                light = s.light
-            if sound and s.sound:
-                body += f" Sound: {s.sound.strip().rstrip('.')}."
-            cut = "" if i == 1 else "Cut to: "
-            lines.append(f"[{t0}-{t0 + s.seconds}s | {s.beat.upper()}] {cut}{body}")
+            if detail and s.detail:
+                # the director's pass wrote the whole shot: lens, frame, beats, acting, physics,
+                # light, effect, last frame and sound
+                body += (f"In frame: {subj}. " if subj else "") + trim_words(s.detail, detail)
+                if s.line:
+                    body += f' {s.speaker} says: "{s.line.strip()}"'
+            else:
+                act = s.action.strip().rstrip(".")
+                if s.framing:
+                    body += f"Framing: {s.framing.strip().rstrip('.')}. "
+                body += f"{subj}: {act}." if subj else f"{act}."
+                if acting and s.performance:
+                    body += f" Acting: {s.performance.strip().rstrip('.')}."
+                if acting and s.fx:
+                    body += f" Effect: {s.fx.strip().rstrip('.')}."
+                if s.line:
+                    body += f' {s.speaker} says: "{s.line.strip()}"'
+                if ends and s.ends and i < len(plan.shots):
+                    body += f" Ends on: {s.ends.strip().rstrip('.')}."
+                if s.light != light:
+                    body += f" Light: {s.light.strip().rstrip('.')}."
+                    light = s.light
+                if sound and s.sound:
+                    body += f" Sound: {s.sound.strip().rstrip('.')}."
+            cut = "" if i == 1 else "Hard cut. "
+            lines.append(f"Shot {i} ({s.seconds} s, {s.beat.upper()}): {cut}{body}")
             shots.append({"prompt": body[:500], "duration": s.seconds})
         return lines, shots
 
     global_prompt = "\n".join([" ".join(head), *blocks, *[t for t in tail if t]])
-    # Over the model's limit: drop the least important detail first (per-shot sounds, then acting
-    # and effects, then end states, then the looks; camera, framing and action are never
-    # cut), then trim the global sections.
+    # Over the model's limit: first shorten the director's shots from the end (sound, then the last
+    # frame, light and physics go first; the action and the lens lead every shot) and the looks,
+    # then fall back to the storyboard fields and drop the least important detail (per-shot
+    # sounds, then acting and effects, then end states, then the looks; camera, framing and action
+    # are never cut), then trim the global sections.
     levels = (
-        (True, True, True, "full"),
-        (False, True, True, "full"),
-        (False, True, False, "full"),
-        (False, False, False, "full"),
-        (False, False, False, "short"),
-        (False, False, False, ""),
+        (1.0, True, True, True, "full"),
+        (0.85, True, True, True, "full"),
+        (0.7, True, True, True, "full"),
+        (0.7, True, True, True, "short"),
+        (0.55, True, True, True, "short"),
+        (0, True, True, True, "full"),
+        (0, False, True, True, "full"),
+        (0, False, True, False, "full"),
+        (0, False, False, False, "full"),
+        (0, False, False, False, "short"),
+        (0, False, False, False, ""),
     )
-    for sound, ends, acting, look in levels:
-        lines, shots = shot_list(sound, ends, acting, look)
+    if not any(s.detail for s in plan.shots):
+        levels = levels[5:]
+    for detail, sound, ends, acting, look in levels:
+        lines, shots = shot_list(detail, sound, ends, acting, look)
         prompt = "\n".join([" ".join(head), *blocks, *lines, *[t for t in tail if t]])
         if not max_chars or len(prompt) <= max_chars:
             break
@@ -367,11 +402,14 @@ def compose_keyframe_prompt(series: Series, plan: EpisodePlan, cast: list[str]) 
     refs.append(f"image {len(cast) + 1} is the location")
     first = plan.shots[0]
     return " ".join(
-        [
+        x
+        for x in [
             f"Opening frame of a vertical anime film, {SIZE_TEXT[first.size].lower()}, {first.angle}:",
             plan.opening_frame.strip().rstrip(".") + ".",
             f"Reference images: {'; '.join(refs)}.",
             f"Setting: the {plan.location.name}, light: {first.light}.",
+            f"The set: {clip_text(plan.world, 900)}" if plan.world else "",
+            f"Blocking: {clip_text(plan.blocking, 500)}" if plan.blocking else "",
             "Draw the characters inside the scene: same light and colour grade, cast shadows, correct "
             "scale and perspective. No outlines, no glow, no white background, no cut-out look, "
             "no character-sheet layout, one pose each.",
@@ -379,7 +417,29 @@ def compose_keyframe_prompt(series: Series, plan: EpisodePlan, cast: list[str]) 
             series.style.bible.strip().rstrip(".") + ".",
             series.style.negative.strip(),
         ]
+        if x
     ).strip()
+
+
+def trim_words(text: str, share: float) -> str:
+    """Keep about `share` of the words, cut at a sentence end (1.0 = all of it)."""
+    text = text.strip()
+    words = text.split()
+    if share >= 1 or not words:
+        return text
+    cut = " ".join(words[: max(1, int(len(words) * share))])
+    end = cut.rfind(". ")
+    return cut[: end + 1] if end > len(cut) // 3 else cut.rstrip(",;") + "."
+
+
+def clip_text(text: str, n: int) -> str:
+    """At most n characters, cut at a sentence end (image prompts are shorter than video ones)."""
+    text = text.strip()
+    if len(text) <= n:
+        return text
+    cut = text[:n]
+    end = cut.rfind(". ")
+    return cut[: end + 1] if end > n // 2 else cut.rstrip() + "."
 
 
 def compose_shot_prompt(
