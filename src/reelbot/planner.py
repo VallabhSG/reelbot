@@ -87,7 +87,10 @@ Answer honestly, as a viewer, not as a writer:
 - summary: one sentence, what happened and what the joke was.
 - confusions: anything you could not understand from the pictures: an action you can't picture,
   an object or power that appears from nowhere, a cut where you lose track of who/where, a
-  punchline that doesn't land. Empty list if none.
+  punchline that doesn't land, AND anything that makes no sense: the problem already solved at the
+  start (the fix already in place or within reach in the place or the first frame), a prop that
+  changes place or state with nobody touching it, an object that has nothing to do with this
+  story. Empty list if none.
 - clear: true only if you could retell the cause, the decisive action and the punchline.
 - score: 1-10 clarity.
 
@@ -180,11 +183,19 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
   (hands, an object, feet, eyes: CU or ECU). Never the same size twice in a row. At least one CU/ECU
   and one WS/EWS.
 - motif: ONE small object or colour (e.g. "a red hair tie", "the green exit light") that appears in
-  at least two shots and pays off in the climax or twist. It ties the cuts together.
+  at least two shots and pays off in the climax or twist. It ties the cuts together. It lives on a
+  story prop or a character (a phone screen, a hair tie), never as a poster or wall decoration.
 - layout: the fixed geography of the location, 30-60 words: where every prop that matters is and
   how far apart ("the wall outlet is low on the LEFT wall, two metres from the sofa; the charger
   cable is one metre long, too short to reach the sofa; the floor lamp stands right of the sofa").
   Every shot keeps it; the action never moves a prop that isn't picked up on screen.
+- start_state: 30-60 words: where every prop the story turns on starts, and in what state, before
+  anything happens ("the phone is in Juno's hand at 2%; the charger lies coiled on the bookshelf
+  across the room, unplugged; the outlet on the left wall is empty"). THE PROBLEM IS STILL UNSOLVED
+  IN THE FIRST FRAME: whatever fixes it starts out of reach, switched off, unplugged, closed or
+  missing, never already in place or within easy reach. If the joke is that the fix was there all
+  along, it starts hidden from the hero (behind her, under the cat) and the camera shows it only at
+  the twist. The location, the layout and the opening frame all match it.
 - opening_frame: the very first frame as a still image: where each character is, pose, what is in
   frame, framing. It must match shot 1 and show EVERY character who appears anywhere in the episode
   (a small background presence is fine): the video is generated from this frame.
@@ -218,6 +229,8 @@ STORYBOARD RULES
 - THE GAG READS ON SCREEN: a viewer with the sound off must see the cause, the move and the
   punchline. When the joke is a measure (too short, too late, too small), show the measure itself
   (the cable pulled taut, the phone stopping a hand's width short of her face).
+- The examples in these rules come from other episodes: never copy their objects (popcorn, keys,
+  a train, a hair tie) into this one. Every object in this episode comes from its own story.
 - Every action must be literally drawable: a physical action with visible objects. Never abstract
   verbs (hack, outsmart, decide, realise, plan, figure out) and never a prop, gadget or power that
   wasn't visible earlier: anything that matters appears in the opening frame or an earlier shot.
@@ -229,7 +242,10 @@ STORYBOARD RULES
 {dialogue}
 - cast: names from the cast list in that shot (max 2), [] for an empty shot.
 - location.plate_prompt describes the place EMPTY (no people, no animals), time of day, weather,
-  light, blank unreadable signage. light: same direction and colour temperature in every shot.
+  light, blank unreadable signage, with the story's props only as start_state has them (never
+  plugged in, switched on or in place if the story does that later). Posters and screens on the
+  walls show plain abstract shapes, never the story's objects or symbols. light: same direction and
+  colour temperature in every shot.
 - hook (the Instagram caption, not a shot): line 1 is a one-line truth everyone recognises about this
   moment ("The doors always wait until you're one step away."), line 2 an optional curiosity line.
   No hashtags.
@@ -240,7 +256,8 @@ STORYBOARD RULES
 Respond with JSON only:
 {{"title": str (1-2 words, max 14 chars), "category": str, "emoji": str, "logline": str, "hook": str,
   "location": {{"name": str, "plate_prompt": str}},
-  "winning_move": str, "direction": str, "motif": str, "opening_frame": str, "layout": str,
+  "winning_move": str, "direction": str, "motif": str, "start_state": str, "opening_frame": str,
+  "layout": str,
   "shots": [{{"beat": str, "seconds": int, "size": str, "angle": str, "camera": str, "cast": [str],
               "framing": str, "action": str, "performance": str, "fx": str,
               "line": str, "speaker": str, "ends": str, "sound": str, "light": str}}, ... exactly {n}],
@@ -250,7 +267,8 @@ The "shots" array must hold all {n} shots, every one complete."""
 
 EPISODE_FIRST = (
     "\n\nTHIS ANSWER: every field EXCEPT the shots (title, category, emoji, logline, hook, "
-    "location, winning_move, direction, motif, opening_frame, layout, music_prompt), each at its "
+    "location, winning_move, direction, motif, start_state, opening_frame, layout, music_prompt), "
+    "each at its "
     'full length. Leave "shots" out: the shots are your next answer, written to match these.'
 )
 
@@ -389,7 +407,11 @@ class Planner:
             f"{i}. ({s.seconds}s, {s.size}) {s.action}" + (f' {s.speaker}: "{s.line}"' if s.line else "")
             for i, s in enumerate(plan.shots, 1)
         )
-        user = f"OPENING FRAME: {plan.opening_frame}\nSHOTS:\n{shots}"
+        user = (
+            f"THE PLACE: {plan.location.plate_prompt}\n"
+            + (f"AT THE START: {plan.start_state}\n" if plan.start_state else "")
+            + f"OPENING FRAME: {plan.opening_frame}\nSHOTS:\n{shots}"
+        )
         try:
             v = self.llm.json_chat(CRITIC_SYSTEM, user, temperature=0.2)
             score = int(v.get("score", 0))

@@ -447,3 +447,18 @@ def test_only_the_shots_are_asked_again_when_the_episode_is_good():
     second = llm.calls[1][1]
     assert "THE EPISODE BELOW IS GOOD" in second and "Kept from the first answer." in second
     assert "exactly 6 shots, got 5" in second
+
+
+def test_the_problem_starts_unsolved_and_examples_are_not_copied(take_series):
+    sp = Planner(None, take_series).system_prompt()
+    assert "THE PROBLEM IS STILL UNSOLVED" in sp and '"start_state": str' in sp
+    assert "never copy their objects" in sp and "never as a poster or wall decoration" in sp
+
+
+def test_the_critic_sees_the_place_and_the_start(take_series):
+    raw = {**_raw_plan(), "start_state": "the charger is already plugged in by the sofa"}
+    llm = ScriptedLLM(raw, CLEAR)
+    Planner(llm, take_series).plan(1, [])
+    system, user = llm.calls[-1]
+    assert "the problem already solved at the" in system
+    assert "AT THE START: the charger is already plugged in by the sofa" in user and "THE PLACE:" in user

@@ -131,6 +131,7 @@ class EpisodePlan(BaseModel):
     direction: str = Field("", description="screen direction kept in every shot, e.g. left to right")
     opening_frame: str = Field("", description="the first frame: who is where, pose, framing")
     layout: str = Field("", description="the fixed geography: where each key prop is, distances")
+    start_state: str = Field("", description="where each story prop starts and in what state")
     # written by the director's pass (director.py): every element of the set, and where everyone
     # and every key prop stands in the opening frame
     world: str = Field("", description="every element of the set, fixed for the episode")

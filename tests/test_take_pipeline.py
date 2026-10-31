@@ -411,3 +411,19 @@ def test_the_director_can_be_switched_off(dry_settings, take_series):
     app = _app(dry_settings, take_series)
     plan = app.db.plan(app.pipeline.plan_next())
     assert app.pipeline._directed(plan) is plan
+
+
+@needs_ffmpeg
+def test_the_story_start_reaches_the_images_and_the_music_follows_the_beats(dry_settings, take_series):
+    app = _app(dry_settings, take_series)
+    p = app.pipeline
+    job = p.plan_next()
+    p.generate(job)
+    plan = app.db.plan(job)
+    assert plan.start_state.startswith("the train waits")
+    images = [c["prompt"] for c in _calls(p, "image")]
+    assert any("Props exactly as the story starts: the train waits" in x for x in images)  # the plate
+    assert any(x.startswith("Opening frame") and "Exactly as the story starts" in x for x in images)
+    assert "[START STATE, before anything happens] the train waits" in _calls(p, "take")[0]["prompt"]
+    chunks = p.music.chunks[-1]
+    assert sum(c["duration_ms"] for c in chunks) == take_series.take.seconds * 1000

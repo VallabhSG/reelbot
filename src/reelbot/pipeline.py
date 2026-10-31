@@ -40,7 +40,8 @@ from .director import Director
 from .facebook import reel_url
 from .learn import Learner, planner_guidance, rematch_brief, rematch_candidate
 from .models import EpisodePlan, JobStatus
-from .planner import Planner
+from .music_plan import music_chunks
+from .planner import Planner, wins_this_episode
 from .providers import MediaProvider
 from .providers._http import download
 from .providers.music import MusicProvider, NoMusic
@@ -325,9 +326,14 @@ class Pipeline:
         if url := self.db.kv_get(f"plate:{job_id}"):
             return url
         world = f" {clip_text(plan.world, 1200)}" if plan.world else ""
+        start = (
+            f" Props exactly as the story starts: {clip_text(plan.start_state, 400)}"
+            if plan.start_state
+            else ""
+        )
         prompt = (
-            f"{plan.location.plate_prompt}.{world} Empty environment, no people, no animals, "
-            f"no readable text or signage. {self.s.style.bible}"
+            f"{plan.location.plate_prompt}.{world}{start} Empty environment, no people, no animals, "
+            f"no readable text or signage; posters and screens show plain abstract shapes. {self.s.style.bible}"
         )
         url = self.media.image(
             {
@@ -370,7 +376,9 @@ class Pipeline:
         self.db.update_shot(job_id, idx, keyframe_url=plate, video_url=vid_url, local_path=str(local))
         self.db.kv_set(f"prompt:{job_id}:{idx}", prompt)
 
-    def _render_music(self, job_id: int, plan: EpisodePlan, seconds: float) -> Path | None:
+    def _render_music(
+        self, job_id: int, plan: EpisodePlan, seconds: float, chunks: list[dict[str, Any]] | None = None
+    ) -> Path | None:
         attempt = self.db.kv_get(f"music_attempt:{job_id}") or "0"
         self.db.kv_set(f"music_attempt:{job_id}", str(int(attempt) + 1))
         return self.music.track(
@@ -379,6 +387,7 @@ class Pipeline:
             self._dir(job_id) / f"music_{attempt}.mp3",
             job_id,
             seed=job_id * 100 + int(attempt),
+            chunks=chunks,
         )
 
     def _title_png(self, job_id: int, plan: EpisodePlan) -> Path:
@@ -591,7 +600,9 @@ class Pipeline:
         bpm = self.s.take.music_bpm
         if bpm and "bpm" not in plan.music_prompt.lower():
             plan = plan.model_copy(update={"music_prompt": f"{plan.music_prompt.rstrip('.')}, {bpm} BPM"})
-        music = self._render_music(job_id, plan, self.s.take.seconds)
+        episode_no = self.db.get_job(job_id)["episode_no"]
+        chunks = music_chunks(self.s, plan, triumph=wins_this_episode(self.s, episode_no))
+        music = self._render_music(job_id, plan, self.s.take.seconds, chunks)
         self.db.kv_set(f"music_path:{job_id}", str(music) if music else "")
         return music
 

@@ -130,7 +130,19 @@ class StubMedia:
 
 
 class StubMusic:
-    def track(self, prompt: str, seconds: float, dest: Path, job_id: int | None, seed: int) -> Path:
+    def __init__(self) -> None:
+        self.chunks: list[Any] = []  # the composition plans asked for, for tests
+
+    def track(
+        self,
+        prompt: str,
+        seconds: float,
+        dest: Path,
+        job_id: int | None,
+        seed: int,
+        chunks: list[dict[str, Any]] | None = None,
+    ) -> Path:
+        self.chunks.append(chunks)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest = dest.with_suffix(".m4a")
         subprocess.run(
@@ -206,6 +218,8 @@ class StubLLM:
             "winning_move": "she slides through the closing doors on her knees",
             "direction": "left to right",
             "motif": "a red hair tie on her wrist",
+            "start_state": "the train waits with its doors open at the far end of the platform; she is at the "
+            "foot of the stairs, ten metres away, phone in hand",
             "opening_frame": "she stands at the platform edge, phone in hand, doors open behind her",
             "shots": [
                 {

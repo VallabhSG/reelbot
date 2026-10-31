@@ -260,6 +260,11 @@ def compose_take_prompt(
             f"[LAYOUT, fixed in every shot] {plan.layout.strip().rstrip('.')}. Nothing moves unless a "
             "character picks it up on screen."
         )
+    if plan.start_state:
+        blocks.append(
+            f"[START STATE, before anything happens] {plan.start_state.strip().rstrip('.')}. Every prop "
+            "stays like this until a character changes it on screen."
+        )
     if plan.blocking:
         blocks.append(f"[FIRST FRAME AND BLOCKING] {plan.blocking.strip()}")
     blocks.append(sep)
@@ -410,6 +415,7 @@ def compose_keyframe_prompt(series: Series, plan: EpisodePlan, cast: list[str]) 
             f"Setting: the {plan.location.name}, light: {first.light}.",
             f"The set: {clip_text(plan.world, 900)}" if plan.world else "",
             f"Blocking: {clip_text(plan.blocking, 500)}" if plan.blocking else "",
+            f"Exactly as the story starts: {clip_text(plan.start_state, 400)}" if plan.start_state else "",
             "Draw the characters inside the scene: same light and colour grade, cast shadows, correct "
             "scale and perspective. No outlines, no glow, no white background, no cut-out look, "
             "no character-sheet layout, one pose each.",

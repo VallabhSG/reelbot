@@ -175,6 +175,10 @@ class MusicSpec(BaseModel):
     provider: Literal["elevenlabs", "library", "none"] = "elevenlabs"
     library_dir: Path = Path("assets/music")
     model_id: str | None = None
+    # score each episode in sections timed to its story beats (music_plan.py), on a model that
+    # takes a composition plan; if ElevenLabs refuses the plan, one prompt is composed instead
+    composition: bool = True
+    plan_model: str = "music_v2_5"
     cost_per_track: float = 0.0
     volume_db: float = -2.0
 

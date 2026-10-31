@@ -60,13 +60,15 @@ Write two things:
 - the room or place itself: walls, floor, ceiling, windows, doors: material, colour, texture, wear
 - every piece of furniture and every prop: where it is (which wall, left or right, how many metres
   from the others), its size, colour, material and state (on, off, open, plugged in, half-empty)
-- the props the story uses, exactly: what they look like, how big or long, where they start; they
-  must match the LAYOUT given to you
+- the props the story uses, exactly: what they look like, how big or long, and where and how they
+  START, exactly as the START STATE says (a charger the story plugs in later starts unplugged and
+  out of reach); never already doing what the story makes them do later; they match the LAYOUT
 - what is outside the windows or beyond the edges (time of day, weather, sky, lights)
 - every light source (lamp, screen, window, neon) with its colour and which way it throws light and
   shadow
-- atmosphere and small life: dust in a light beam, a plant, a mug, a crumpled blanket; posters and
-  screens show only blank shapes or simple icons, never words
+- atmosphere and small life: dust in a light beam, a plant, a mug, a crumpled blanket; posters,
+  paintings and screens show only plain abstract shapes, never words and never the story's
+  objects, motif or symbols
 - end with the palette: 3-5 named colours
 Never people or animals (the cast is described separately), never brands, logos or readable text,
 nothing that contradicts the location description or the layout.
@@ -109,7 +111,8 @@ Rules:
 - Characters wear exactly the look given, in every shot. Never write anyone taking off, adding,
   opening or changing any clothing, hair style or accessory; gearing up is hands, eyes and stance.
 - Only things that exist in the set or that a character already carries. Nothing appears from
-  nowhere; nothing moves unless a character or the camera moves it.
+  nowhere; nothing moves unless a character or the camera moves it. Props are in the state the
+  story has reached by this shot (unplugged until the shot that plugs it in).
 - Keep the screen direction. Start exactly where the previous shot ended; end where the next shot
   starts.
 - Refer to characters by name. No brands, no readable text, no logos.
@@ -171,6 +174,8 @@ class Director:
         ]
         if plan.layout:
             lines.append(f"LAYOUT: {plan.layout.strip()}")
+        if plan.start_state:
+            lines.append(f"START STATE (before anything happens): {plan.start_state.strip()}")
         if plan.direction:
             lines.append(f"SCREEN DIRECTION: {plan.direction}")
         if plan.motif:
