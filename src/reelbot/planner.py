@@ -134,9 +134,10 @@ METHOD (how the most-watched creator in this niche works)
 - On the biggest emotional reaction put an anime effect IN the picture: a radial colour burst
   behind the face, heart eyes, a giant sweat drop, steam from the ears.
 - THE CHALLENGER'S ENTRANCE: early on, one low-angle extreme close-up of the hero gearing up like a
-  fighter before a boss (tying her hair back, cracking her knuckles, a glint across her glasses,
-  her sneakers planting on the ground; never by touching her clothes), then cut wide. One second is enough. A strong version is a
-  REFLECTION that holds both fighters in one frame: the boss reflected in her glasses, or her face
+  fighter before a boss (cracking her knuckles, a glint in her narrowed eyes, her sneakers planting
+  on the ground; never by touching her clothes or hair), then cut wide. One second is enough. A
+  strong version is a REFLECTION that holds both fighters in one frame: the boss reflected in her
+  eyes, or her face
   reflected in the boss itself (the phone's black screen, the microwave door, the train window).
   Another is an EYE MATCH CUT: shot 1 ends on the problem's round shape (the battery ring, the
   clock face, the circled F) centred in the upper third, one third of the frame wide; the next shot
@@ -210,7 +211,8 @@ STORYBOARD RULES
 - fx: the anime effect drawn in the picture this shot, if any (speed lines, a red power aura, an
   impact flash, a giant sweat drop), else "".
 - WARDROBE IS LOCKED: nobody ever takes off, adds or swaps any clothing, at any point (gearing up
-  is hands, hair, eyes and stance, never clothes). Props stay where the layout puts them.
+  is hands, eyes and stance, never clothes or hair). Never give anyone glasses, a hat, a bag or any
+  accessory their cast description doesn't have. Props stay where the layout puts them.
 - THE GAG READS ON SCREEN: a viewer with the sound off must see the cause, the move and the
   punchline. When the joke is a measure (too short, too late, too small), show the measure itself
   (the cable pulled taut, the phone stopping a hand's width short of her face).
