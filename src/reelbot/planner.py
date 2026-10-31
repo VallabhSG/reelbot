@@ -13,8 +13,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .models import BEATS, EpisodePlan
+from .models import BEATS, SHOT_KEYS, EpisodePlan, recover_shots
 from .providers import JSONChat
+from .providers.llm import AnswerCutOff
 from .series import EpisodeSeed, Series
 from .storyboard import normalise, storyboard_problems
 
@@ -247,12 +248,29 @@ Respond with JSON only:
 The "shots" array must hold all {n} shots, every one complete."""
 
 
-SHOT_KEYS = {"shots", "storyboard", "shot_list", "shotlist", "shots_list", "scenes", "shot_plan"}
+EPISODE_FIRST = (
+    "\n\nTHIS ANSWER: every field EXCEPT the shots (title, category, emoji, logline, hook, "
+    "location, winning_move, direction, motif, opening_frame, layout, music_prompt), each at its "
+    'full length. Leave "shots" out: the shots are your next answer, written to match these.'
+)
 
 
 def episode_fields(raw: dict[str, Any]) -> dict[str, Any]:
     """Everything an answer said about the episode except its shots."""
-    return {k: v for k, v in raw.items() if k not in SHOT_KEYS}
+    return {k: v for k, v in raw.items() if k != "shots" and k not in SHOT_KEYS}
+
+
+def episode_errors(episode: dict[str, Any]) -> list[Any]:
+    """What is wrong with an episode answer, its (absent) shots aside."""
+    try:
+        EpisodePlan.model_validate({**episode, "shots": []})
+    except ValidationError as e:
+        return [err for err in e.errors() if err["loc"] and err["loc"][0] != "shots"]
+    return []
+
+
+def has_shots(raw: object) -> bool:
+    return isinstance(recover_shots(raw), dict) and isinstance(recover_shots(raw).get("shots"), list)
 
 
 def shots_only_request(keep: dict[str, Any], n: int) -> str:
@@ -401,14 +419,30 @@ class Planner:
         # An episode that came back good except for its shots (none, too few, broken) is kept, and
         # the next attempt asks for the shots alone: a smaller answer, every field at full length.
         keep: dict[str, Any] | None = None
+        # The episode and its shots are two answers: one long answer got cut off on Groq (31 Oct).
+        n = self.series.shot_count
         for attempt in range(1, self.max_attempts + 1):
-            user = self.user_prompt(episode_no, past_titles, feedback, guidance, seed)
-            if keep is not None:
-                user += shots_only_request(keep, self.series.shot_count)
-            raw = self.llm.json_chat(self.system_prompt(), user, temperature=0.9 if attempt == 1 else 0.7)
-            if keep is not None and isinstance(raw, dict):
-                raw = {**keep, **raw}  # the answer may be just {"shots": [...]}
-            keep = None
+            base = self.user_prompt(episode_no, past_titles, feedback, guidance, seed)
+            temp = 0.9 if attempt == 1 else 0.7
+            episode, keep = keep, None
+            try:
+                if episode is None:
+                    raw = self.llm.json_chat(self.system_prompt(), base + EPISODE_FIRST, temperature=temp)
+                    # a whole plan in one answer is taken as it is; so is junk (no title)
+                    ok = isinstance(raw, dict) and raw.get("title") and not has_shots(raw)
+                    episode = episode_fields(raw) if ok else None
+                    if episode is not None and episode_errors(episode):
+                        episode = None  # fix the episode first: its errors are fed back below
+                if episode is not None:
+                    shots = self.llm.json_chat(
+                        self.system_prompt(), base + shots_only_request(episode, n), temperature=0.7
+                    )
+                    raw = {**episode, **(recover_shots(shots) if isinstance(shots, dict) else {})}
+            except AnswerCutOff as e:
+                keep = episode  # a good episode survives a cut-off shot list
+                feedback = f"your last answer was cut off before the end ({e}); write it again, complete"
+                log.warning("plan attempt %d cut off: %s", attempt, e)
+                continue
             try:
                 plan = EpisodePlan.model_validate(raw)
             except ValidationError as e:

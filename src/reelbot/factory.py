@@ -46,7 +46,12 @@ def build(settings: Settings, series: Series | None = None) -> App:
         youtube = DryRunYouTube()
         facebook = DryRunFacebook()
     else:
-        llm = LLMClient(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
+        llm = LLMClient(
+            settings.llm_base_url,
+            settings.llm_api_key,
+            settings.llm_model,
+            reasoning_effort=settings.llm_reasoning_effort,
+        )
         media = HiggsfieldMedia(
             HiggsfieldClient(settings.hf_api_key_id, settings.hf_api_key_secret, settings.hf_base_url),
             series.models,

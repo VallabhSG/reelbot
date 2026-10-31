@@ -410,8 +410,32 @@ def test_a_plan_without_shots_gets_told_where_they_go(take_series):
     llm = LLM()
     with pytest.raises(RuntimeError):
         Planner(llm, take_series).plan(1, [])
-    assert 'Your JSON had no "shots" array' in llm.users[1]
-    assert "THE EPISODE BELOW IS GOOD" in llm.users[1]
+    assert "THIS ANSWER: every field EXCEPT the shots" in llm.users[0]
+    assert "THE EPISODE BELOW IS GOOD" in llm.users[1]  # the shots, asked for on their own
+    assert 'Your JSON had no "shots" array' in llm.users[2]
+
+
+def test_the_episode_and_its_shots_are_two_answers():
+    raw = _raw_plan()
+    episode = {k: v for k, v in raw.items() if k != "shots"}
+    llm = ScriptedLLM(episode, {"shots": raw["shots"]}, CLEAR)
+    plan = Planner(llm, make_take_series()).plan(1, [])
+    assert len(plan.shots) == len(raw["shots"]) and plan.logline == raw["logline"]
+    assert "THIS ANSWER: every field EXCEPT the shots" in llm.calls[0][1]
+    assert "THE EPISODE BELOW IS GOOD" in llm.calls[1][1] and raw["logline"] in llm.calls[1][1]
+
+
+def test_a_cut_off_answer_is_asked_again():
+    from reelbot.providers.llm import AnswerCutOff
+
+    raw = _raw_plan()
+    episode = {k: v for k, v in raw.items() if k != "shots"}
+    cut = AnswerCutOff("the model's JSON was incomplete (5000 characters came back)")
+    llm = ScriptedLLM(episode, cut, {"shots": raw["shots"]}, CLEAR)
+    plan = Planner(llm, make_take_series()).plan(1, [])
+    assert len(plan.shots) == len(raw["shots"])
+    third = llm.calls[2][1]  # the episode survived: only the shots are asked for again
+    assert "THE EPISODE BELOW IS GOOD" in third and "was cut off before the end" in third
 
 
 def test_only_the_shots_are_asked_again_when_the_episode_is_good():

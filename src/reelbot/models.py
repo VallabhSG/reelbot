@@ -144,23 +144,7 @@ class EpisodePlan(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _find_shots(cls, data: object) -> object:
-        """A plan whose shots sit under another name, or a plan wrapped in one key ({"episode":
-        {...}}), is still the plan."""
-        if not isinstance(data, dict) or isinstance(data.get("shots"), list):
-            return data
-        wrapped = [v for v in data.values() if isinstance(v, dict) and "shots" in v]
-        if len(wrapped) == 1 and "title" not in data:
-            return {**{k: v for k, v in data.items() if not isinstance(v, dict)}, **wrapped[0]}
-        for key in ("storyboard", "shot_list", "shotlist", "shots_list", "scenes", "shot_plan"):
-            alt = data.get(key)
-            if isinstance(alt, dict) and isinstance(alt.get("shots"), list):
-                alt = alt["shots"]
-            if isinstance(alt, list) and alt and all(isinstance(x, dict) for x in alt):
-                return {**data, "shots": alt}
-        shots = data.get("shots")
-        if isinstance(shots, dict) and shots and all(isinstance(x, dict) for x in shots.values()):
-            return {**data, "shots": list(shots.values())}  # {"1": {...}, "2": {...}}
-        return data
+        return recover_shots(data)
 
     @model_validator(mode="before")
     @classmethod
@@ -176,6 +160,29 @@ class EpisodePlan(BaseModel):
                 else "playful anime action score that builds to one big hit, then a short comic sting",
             }
         return data
+
+
+SHOT_KEYS = ("storyboard", "shot_list", "shotlist", "shots_list", "scenes", "shot_plan")
+
+
+def recover_shots(data: object) -> object:
+    """A plan whose shots sit under another name, or a plan wrapped in one key ({"episode":
+    {...}}), or shots as a numbered object, is still the plan."""
+    if not isinstance(data, dict) or isinstance(data.get("shots"), list):
+        return data
+    wrapped = [v for v in data.values() if isinstance(v, dict) and "shots" in v]
+    if len(wrapped) == 1 and "title" not in data:
+        return recover_shots({**{k: v for k, v in data.items() if not isinstance(v, dict)}, **wrapped[0]})
+    for key in SHOT_KEYS:
+        alt = data.get(key)
+        if isinstance(alt, dict) and isinstance(alt.get("shots"), list):
+            alt = alt["shots"]
+        if isinstance(alt, list) and alt and all(isinstance(x, dict) for x in alt):
+            return {**data, "shots": alt}
+    shots = data.get("shots")
+    if isinstance(shots, dict) and shots and all(isinstance(x, dict) for x in shots.values()):
+        return {**data, "shots": list(shots.values())}  # {"1": {...}, "2": {...}}
+    return data
 
 
 class JobStatus(StrEnum):

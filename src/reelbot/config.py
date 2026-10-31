@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.groq.com/openai/v1"
     llm_api_key: str = ""
     llm_model: str = "openai/gpt-oss-120b"  # Groq's replacement for the retired llama-3.3-70b-versatile
+    llm_reasoning_effort: str = "low"  # gpt-oss only: low | medium | high ("" = the provider's default)
 
     # --- Higgsfield (images + video: Soul, Kling, Seedance, PixVerse...) ---
     # Either the single value the console's "Copy API key" gives ("<id>:<secret>") or the two parts.
