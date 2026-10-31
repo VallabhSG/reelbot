@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -242,11 +243,30 @@ Respond with JSON only:
   "shots": [{{"beat": str, "seconds": int, "size": str, "angle": str, "camera": str, "cast": [str],
               "framing": str, "action": str, "performance": str, "fx": str,
               "line": str, "speaker": str, "ends": str, "sound": str, "light": str}}, ... exactly {n}],
-  "music_prompt": str}}"""
+  "music_prompt": str}}
+The "shots" array must hold all {n} shots, every one complete."""
+
+
+SHOT_KEYS = {"shots", "storyboard", "shot_list", "shotlist", "shots_list", "scenes", "shot_plan"}
+
+
+def episode_fields(raw: dict[str, Any]) -> dict[str, Any]:
+    """Everything an answer said about the episode except its shots."""
+    return {k: v for k, v in raw.items() if k not in SHOT_KEYS}
+
+
+def shots_only_request(keep: dict[str, Any], n: int) -> str:
+    return (
+        "\n\nTHE EPISODE BELOW IS GOOD: keep every field of it exactly as written. Only the shots "
+        "need writing again, fixing the problems above:\n"
+        + json.dumps(keep, ensure_ascii=False)
+        + f'\nRespond with JSON only: {{"shots": [...]}} holding exactly {n} shots, every field of '
+        "every shot complete at its full length, following every storyboard rule."
+    )
 
 
 class Planner:
-    def __init__(self, llm: JSONChat, series: Series, max_attempts: int = 4):
+    def __init__(self, llm: JSONChat, series: Series, max_attempts: int = 6):
         self.llm = llm
         self.series = series
         self.max_attempts = max_attempts
@@ -378,20 +398,44 @@ class Planner:
             seed = self.default_seed(episode_no)
         feedback = ""
         best: tuple[int, EpisodePlan] | None = None
+        # An episode that came back good except for its shots (none, too few, broken) is kept, and
+        # the next attempt asks for the shots alone: a smaller answer, every field at full length.
+        keep: dict[str, Any] | None = None
         for attempt in range(1, self.max_attempts + 1):
-            raw = self.llm.json_chat(
-                self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback, guidance, seed)
-            )
+            user = self.user_prompt(episode_no, past_titles, feedback, guidance, seed)
+            if keep is not None:
+                user += shots_only_request(keep, self.series.shot_count)
+            raw = self.llm.json_chat(self.system_prompt(), user, temperature=0.9 if attempt == 1 else 0.7)
+            if keep is not None and isinstance(raw, dict):
+                raw = {**keep, **raw}  # the answer may be just {"shots": [...]}
+            keep = None
             try:
                 plan = EpisodePlan.model_validate(raw)
             except ValidationError as e:
-                feedback = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors())
-                log.warning("plan attempt %d invalid: %s", attempt, feedback)
+                errors = e.errors()
+                feedback = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in errors)
+                keys = sorted(raw) if isinstance(raw, dict) else type(raw).__name__
+                log.warning(
+                    "plan attempt %d invalid: %s (answer had keys %s; starts %s)",
+                    attempt,
+                    feedback,
+                    keys,
+                    json.dumps(raw, ensure_ascii=False)[:600],
+                )
+                if any(err["loc"][:1] == ("shots",) and err["type"] == "missing" for err in errors):
+                    feedback += (
+                        '. Your JSON had no "shots" array: put every shot, complete, in "shots" at the '
+                        "top level, next to title and location"
+                    )
+                if isinstance(raw, dict) and errors and all(err["loc"][:1] == ("shots",) for err in errors):
+                    keep = episode_fields(raw)
                 continue
             problems = storyboard_problems(self.series, plan)
             if problems:
                 feedback = "; ".join(problems)
                 log.warning("plan attempt %d breaks storyboard rules: %s", attempt, feedback)
+                if isinstance(raw, dict):
+                    keep = episode_fields(raw)
                 continue
             plan = normalise(self.series, plan)
             if seed:  # the calendar wins over the model for category/emoji

@@ -92,7 +92,7 @@ def test_calendar_category_overrides_model(series):
 
 
 def test_gives_up_after_max_attempts_and_sends_past_titles(series):
-    llm = ScriptedLLM({}, {}, {}, {})
+    llm = ScriptedLLM(*[{} for _ in range(Planner(None, series).max_attempts)])
     with pytest.raises(RuntimeError, match="planner failed"):
         Planner(llm, series).plan(50, ["LAST TRAIN (Metro)"])
     assert "LAST TRAIN (Metro)" in llm.users[0] and "No category planned" in llm.users[0]

@@ -278,9 +278,8 @@ def test_unclear_storyboard_goes_back_with_the_viewers_confusion():
 
 def test_critic_never_blocks_the_day():
     # every storyboard foggy: ship the clearest one instead of failing
-    llm = ScriptedLLM(
-        _raw_plan(), FOGGY, _raw_plan(), {**FOGGY, "score": 6}, _raw_plan(), FOGGY, _raw_plan(), FOGGY
-    )
+    foggy = [FOGGY, {**FOGGY, "score": 6}, FOGGY, FOGGY, FOGGY, FOGGY]
+    llm = ScriptedLLM(*[x for f in foggy for x in (_raw_plan(), f)])
     assert Planner(llm, make_take_series()).plan(1, []).title == "GATE"
     # critic down: accept the valid storyboard
     llm = ScriptedLLM(_raw_plan(), RuntimeError("groq 503"))
@@ -380,3 +379,47 @@ def test_director_prompt_trims_acting_before_end_states_and_never_framing(take_s
     assert "Sound:" not in p and "Acting:" not in p and "Ends on:" in p and "Framing:" in p
     tight = compose_take_prompt(take_series, plan, "", start_frame=True, max_chars=1500).prompt
     assert len(tight) <= 1500 and "Framing:" in tight
+
+
+@pytest.mark.parametrize(
+    "wrap",
+    [
+        lambda raw: {**{k: v for k, v in raw.items() if k != "shots"}, "storyboard": raw["shots"]},
+        lambda raw: {**{k: v for k, v in raw.items() if k != "shots"}, "shot_list": raw["shots"]},
+        lambda raw: {"episode": raw},
+        lambda raw: {**raw, "shots": {str(i + 1): s for i, s in enumerate(raw["shots"])}},
+    ],
+)
+def test_shots_under_another_name_still_make_a_plan(wrap):
+    raw = _raw_plan()
+    plan = EpisodePlan.model_validate(wrap(raw))
+    assert len(plan.shots) == len(raw["shots"])
+
+
+def test_a_plan_without_shots_gets_told_where_they_go(take_series):
+    raw = {k: v for k, v in _raw_plan().items() if k != "shots"}
+
+    class LLM:
+        def __init__(self):
+            self.users = []
+
+        def json_chat(self, system, user, temperature=0.9):
+            self.users.append(user)
+            return raw
+
+    llm = LLM()
+    with pytest.raises(RuntimeError):
+        Planner(llm, take_series).plan(1, [])
+    assert 'Your JSON had no "shots" array' in llm.users[1]
+    assert "THE EPISODE BELOW IS GOOD" in llm.users[1]
+
+
+def test_only_the_shots_are_asked_again_when_the_episode_is_good():
+    raw = _raw_plan()
+    short = {**raw, "shots": raw["shots"][:5], "logline": "Kept from the first answer."}
+    llm = ScriptedLLM(short, {"shots": raw["shots"]}, CLEAR)
+    plan = Planner(llm, make_take_series()).plan(1, [])
+    assert plan.logline == "Kept from the first answer." and len(plan.shots) == len(raw["shots"])
+    second = llm.calls[1][1]
+    assert "THE EPISODE BELOW IS GOOD" in second and "Kept from the first answer." in second
+    assert "exactly 6 shots, got 5" in second
