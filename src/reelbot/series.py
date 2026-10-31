@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 from typing import Any, Literal
 
@@ -49,10 +50,19 @@ class EpisodeSeed(BaseModel):
     # Optional motion/camera reference clip URL (Seedance 2.5 `video_urls`). Use clips you're
     # allowed to use: your own footage, licensed stock, or an earlier reel of ours.
     reference_video: str = ""
+    # The boss card's small line for this episode instead of take.boss_card_label ("IT CAME BACK")
+    card_label: str = ""
 
     @property
     def scripted(self) -> bool:
         return bool(self.stake and self.move and self.payoff)
+
+
+class SpecialSeed(EpisodeSeed):
+    """An episode pinned to a date (a festival, a seasonal moment): planned on that day instead of
+    the next numbered one, without using up a numbered calendar entry. Only on an episode day."""
+
+    date: dt.date
 
 
 class SeriesMeta(BaseModel):
@@ -257,6 +267,7 @@ class Series(BaseModel):
     characters: list[Character] = Field(default_factory=list)
     cast: CastSpec = CastSpec()
     episodes: list[EpisodeSeed] = Field(default_factory=list)
+    specials: list[SpecialSeed] = Field(default_factory=list)  # date-pinned episodes
     # famous movie moments to stage unscripted episodes like (film language only, never the film's
     # characters, lines or music); the planner picks the one that fits the gag
     homages: list[str] = Field(default_factory=list)

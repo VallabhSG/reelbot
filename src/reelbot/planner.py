@@ -14,10 +14,12 @@ from pydantic import ValidationError
 
 from .models import BEATS, EpisodePlan
 from .providers import JSONChat
-from .series import Series
+from .series import EpisodeSeed, Series
 from .storyboard import normalise, storyboard_problems
 
 log = logging.getLogger(__name__)
+
+AUTO = object()  # plan()/user_prompt(): use the numbered calendar entry for this episode
 
 SYSTEM = """You are the director of a wordless anime micro-film series for Instagram Reels.
 Each episode is {seconds} seconds: exactly {n} shots of {shot_s} seconds, then music. No dialogue,
@@ -268,11 +270,21 @@ class Planner:
             beats=" -> ".join(BEATS[: s.shots.count]) if s.shots.count == len(BEATS) else "free",
         )
 
+    def default_seed(self, episode_no: int) -> EpisodeSeed | None:
+        eps = self.series.episodes
+        return eps[episode_no - 1] if 0 < episode_no <= len(eps) else None
+
     def user_prompt(
-        self, episode_no: int, past_titles: list[str], feedback: str = "", guidance: str = ""
+        self,
+        episode_no: int,
+        past_titles: list[str],
+        feedback: str = "",
+        guidance: str = "",
+        seed: EpisodeSeed | None | object = AUTO,
     ) -> str:
         s = self.series
-        seed = s.episodes[episode_no - 1] if episode_no - 1 < len(s.episodes) else None
+        if seed is AUTO:
+            seed = self.default_seed(episode_no)
         lines = [
             f"EPISODE {episode_no} of {s.series.total_episodes}.",
             f"SHOT_COUNT_JSON={json.dumps(s.shot_count)}",
@@ -337,12 +349,20 @@ class Planner:
             "Make cause -> winning move -> payoff literal and visible with the sound off"
         )
 
-    def plan(self, episode_no: int, past_titles: list[str], guidance: str = "") -> EpisodePlan:
+    def plan(
+        self,
+        episode_no: int,
+        past_titles: list[str],
+        guidance: str = "",
+        seed: EpisodeSeed | None | object = AUTO,
+    ) -> EpisodePlan:
+        if seed is AUTO:
+            seed = self.default_seed(episode_no)
         feedback = ""
         best: tuple[int, EpisodePlan] | None = None
         for attempt in range(1, self.max_attempts + 1):
             raw = self.llm.json_chat(
-                self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback, guidance)
+                self.system_prompt(), self.user_prompt(episode_no, past_titles, feedback, guidance, seed)
             )
             try:
                 plan = EpisodePlan.model_validate(raw)
@@ -356,9 +376,6 @@ class Planner:
                 log.warning("plan attempt %d breaks storyboard rules: %s", attempt, feedback)
                 continue
             plan = normalise(self.series, plan)
-            seed = (
-                self.series.episodes[episode_no - 1] if episode_no - 1 < len(self.series.episodes) else None
-            )
             if seed:  # the calendar wins over the model for category/emoji
                 plan.category, plan.emoji = seed.category, seed.emoji or plan.emoji
             if not self.series.take.enabled:

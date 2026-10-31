@@ -18,7 +18,7 @@ import logging
 import re
 import shutil
 import subprocess
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +43,7 @@ from .planner import Planner
 from .providers import MediaProvider
 from .providers._http import download
 from .providers.music import MusicProvider, NoMusic
-from .series import Series
+from .series import EpisodeSeed, Series
 from .storage import Storage
 from .storyboard import (
     compose_keyframe_prompt,
@@ -203,12 +203,21 @@ class Pipeline:
         if n > self.s.series.total_episodes:
             raise RuntimeError(f"series complete ({self.s.series.total_episodes} episodes)")
         guidance = planner_guidance(self.db)
-        seed = self.s.episodes[n - 1] if 0 < n <= len(self.s.episodes) else None
-        hit = rematch_candidate(self.db) if self.s.take.rematch and not (seed and seed.scripted) else None
+        seed, special = self.seed_for_episode(n, datetime.now(self.guard.tz).date())
+        hit = None
+        if self.s.take.rematch and not special and not (seed and seed.scripted):
+            hit = rematch_candidate(self.db)
         if hit:
             guidance = f"{rematch_brief(hit)}\n{guidance}".strip()
-        plan = self.planner.plan(n, self.db.past_titles(), guidance=guidance)
+        plan = self.planner.plan(n, self.db.past_titles(), guidance=guidance, seed=seed)
         job_id = self.db.create_job(n, plan)
+        if special:
+            specials = json.loads(self.db.kv_get("specials") or "{}")
+            specials[str(job_id)] = special
+            self.db.kv_set("specials", json.dumps(specials))
+            self.notifier.send_message(
+                f"📅 #{job_id} is today's special: {seed.emoji} {seed.category}".strip()
+            )
         if hit:
             self.db.kv_set(f"rematch:{hit.job_id}", str(job_id))
             self.db.kv_set(f"rematch_of:{job_id}", str(hit.job_id))
@@ -355,7 +364,11 @@ class Pipeline:
         tc, t = self.s.title_card, self.s.take
         font = self.s.resolve(tc.font) if tc.font else None
         spec = tc.model_copy(update={"y_ratio": t.boss_card_y_ratio})
-        label = t.boss_card_rematch_label if self.db.kv_get(f"rematch_of:{job_id}") else t.boss_card_label
+        seed = self._seed(job_id)
+        if self.db.kv_get(f"rematch_of:{job_id}"):
+            label = t.boss_card_rematch_label
+        else:
+            label = seed.card_label if seed and seed.card_label else t.boss_card_label
         return render_title_card(
             plan.category.strip().upper(), label, spec, font, self._dir(job_id) / "boss_card.png"
         )
@@ -442,9 +455,38 @@ class Pipeline:
         self.db.kv_set(f"keyframe:{job_id}", url)
         return url
 
-    def _seed(self, job_id: int):
+    # ---- the calendar: date-pinned specials first, then the numbered entries. A special doesn't
+    # use up a numbered entry: those shift by the number of specials made before them.
+    def _live_specials(self) -> dict[int, tuple[str, int]]:
+        """job id -> (date, episode number) for specials whose job still counts."""
+        out: dict[int, tuple[str, int]] = {}
+        for jid, day in json.loads(self.db.kv_get("specials") or "{}").items():
+            job = self.db.get_job(int(jid))
+            if job and job["status"] not in (JobStatus.REJECTED, JobStatus.FAILED):
+                out[int(jid)] = (day, job["episode_no"])
+        return out
+
+    def _numbered_seed(self, n: int, skip: int) -> EpisodeSeed | None:
+        i = n - 1 - skip
+        return self.s.episodes[i] if 0 <= i < len(self.s.episodes) else None
+
+    def seed_for_episode(self, n: int, today: date | None = None) -> tuple[EpisodeSeed | None, str]:
+        """(seed, special date or '') for the next episode, numbered n, planned today."""
+        live = self._live_specials()
+        if today is not None:
+            used = {day for day, _ in live.values()}
+            for sp in self.s.specials:
+                if sp.date == today and sp.date.isoformat() not in used:
+                    return sp, sp.date.isoformat()
+        return self._numbered_seed(n, sum(1 for _, e in live.values() if e < n)), ""
+
+    def _seed(self, job_id: int) -> EpisodeSeed | None:
         n = self.db.get_job(job_id)["episode_no"]
-        return self.s.episodes[n - 1] if 0 < n <= len(self.s.episodes) else None
+        day = json.loads(self.db.kv_get("specials") or "{}").get(str(job_id))
+        if day:
+            return next((s for s in self.s.specials if s.date.isoformat() == day), None)
+        live = self._live_specials()
+        return self._numbered_seed(n, sum(1 for jid, (_, e) in live.items() if e < n and jid != job_id))
 
     def _take_with_fallback(self, name: str, ctx: dict[str, Any], job_id: int) -> str:
         """Make the take on `name`; if that fails for any reason but the budget, make it on the

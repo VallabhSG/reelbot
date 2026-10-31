@@ -345,6 +345,23 @@ caption:
     - url: "https://try.elevenlabs.io/8k8afoea9y48"
       link_text: "🎵 Music by ElevenLabs (affiliate link): {url}"
 
+# Date-pinned episodes (festivals, seasonal moments): planned on that date instead of the next
+# numbered entry, which waits. Only on an episode day (schedule.days). From the playbook (P13).
+specials:
+  - date: 2026-11-05
+    category: "Diwali ki Safai"
+    emoji: "🪔"
+    idea: "Diwali cleaning: Juno vs the ceiling fan nobody has cleaned since last Diwali, a year of dust; Mochi supervises from the one clean sofa"
+  - date: 2026-11-07
+    category: "Cracker Night"
+    emoji: "🎆"
+    idea: "Diwali night: every distant pop makes Juno flinch harder while Mochi sleeps straight through it; she is never in danger, and it is never an ad for crackers"
+  - date: 2026-11-10
+    category: "Soan Papdi"
+    emoji: "🎁"
+    card_label: "IT CAME BACK"
+    idea: "the box of soan papdi Juno regifted last Diwali comes back to her, as a gift from Ren; a generic sweets box, no brand"
+
 facebook:
   # Meta's "AI info" label on every reel: label ourselves before Instagram/Facebook make us
   ai_label: true

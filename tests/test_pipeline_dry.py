@@ -168,3 +168,41 @@ def test_series_file_carries_both_affiliate_links_on_every_platform():
     assert any("higgsfield.ai" in x for x in lines) and any("elevenlabs.io" in x for x in lines)
     assert all("(affiliate link): https://" in x for x in lines)
     assert cap.affiliate_lines("instagram") == lines  # the links themselves, not "in bio"
+
+
+def test_a_dated_special_takes_its_day_without_using_up_a_numbered_entry(dry_settings, series, monkeypatch):
+    from datetime import date
+
+    from reelbot import pipeline as pl
+    from reelbot.series import EpisodeSeed, SpecialSeed
+
+    series.episodes = [EpisodeSeed(category=c) for c in ("A", "B", "C")]
+    day = date(2026, 11, 5)
+    series.specials = [SpecialSeed(category="Diwali ki Safai", emoji="🪔", date=day, card_label="DUST")]
+    app = build(dry_settings, series)
+    p = app.pipeline
+    plan = p.planner.plan(1, [])
+    j1 = app.db.create_job(1, plan)
+    assert p._seed(j1).category == "A"
+    seed, special = p.seed_for_episode(2, day)
+    assert seed.category == "Diwali ki Safai" and special == "2026-11-05"
+    j2 = app.db.create_job(2, plan)
+    app.db.kv_set("specials", json.dumps({str(j2): special}))
+    assert p.seed_for_episode(3, day)[1] == ""  # once per date
+    assert p.seed_for_episode(3, date(2026, 11, 6))[0].category == "B"  # B waited, nothing skipped
+    j3 = app.db.create_job(3, plan)
+    assert (p._seed(j2).category, p._seed(j3).category) == ("Diwali ki Safai", "B")
+    labels = []
+    monkeypatch.setattr(pl, "render_title_card", lambda t, sub, *a: labels.append((t, sub)) or Path("x"))
+    p._boss_card(j2, plan)
+    assert labels[-1][1] == "DUST"
+    app.db.update_job(j2, status=JobStatus.REJECTED)  # a rejected special frees its day again
+    assert p.seed_for_episode(2, day)[1] == "2026-11-05"
+
+
+def test_series_file_pins_diwali_specials_to_episode_days():
+    s = load_series(Path(__file__).parents[1] / "series" / "everyday-boss-fights.yaml")
+    days = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+    names = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    assert s.specials and all(names[sp.date.weekday()] in s.schedule.days for sp in s.specials)
+    assert days >= set(s.schedule.days)
