@@ -212,8 +212,14 @@ STORYBOARD RULES
   twist = a deadpan, funny anticlimax that recontextualises everything (or the TRIUMPH, when the
   episode asks for it: the win lands in front of a witness).
 - camera: exactly ONE physical move per shot: "static locked-off", "slow push-in", "fast push-in",
-  "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "handheld follow",
-  "whip pan", "slow-motion speed ramp" (climax only).
+  "pull-back reveal", "lateral tracking", "low tracking", "orbit", "crane up", "slow crane down",
+  "handheld follow", "whip pan", "rack focus" (a glowing object sharp in front, then the subject
+  behind it), "slow-motion speed ramp" (climax only).
+- STILL IS CLEAN: the quiet beats (the first second of the hook when the problem is still, the beat
+  before the twist, a deadpan or a proud ending) are held compositions: a locked or slow camera,
+  small motions only (a blink, a sip, steam, rain, a tail flick), shallow focus with soft lights
+  behind. Fast motion is for the clash and the climax. Held shots come out flawless; the most
+  liked calm reels are four slow shots in twelve seconds.
 - action: the shot's movement written out beat by beat like a director's note, 30-60 words: who
   moves which body part, which way on screen, how fast, what it touches, and the exact pose it ends
   in. Refer to cast by name only. No dialogue, no thoughts, no text, no signs.

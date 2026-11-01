@@ -462,3 +462,8 @@ def test_the_critic_sees_the_place_and_the_start(take_series):
     system, user = llm.calls[-1]
     assert "the problem already solved at the" in system
     assert "AT THE START: the charger is already plugged in by the sofa" in user and "THE PLACE:" in user
+
+
+def test_quiet_beats_are_held_and_rack_focus_is_a_move(take_series):
+    sp = Planner(None, take_series).system_prompt()
+    assert "STILL IS CLEAN" in sp and '"rack focus"' in sp and '"slow crane down"' in sp

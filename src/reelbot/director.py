@@ -95,7 +95,8 @@ them out. Present tense, plain physical words, in this order:
 2. Lens and camera: focal length (14 mm ultra-wide, 24 mm wide, 35 mm, 50 mm, 85 mm portrait,
    100 mm macro), camera height (floor level, knee, waist, eye level, overhead), distance to the
    subject in metres, the ONE camera move with its speed and path, depth of field and what is in
-   focus.
+   focus. Close shots get shallow focus with soft round bokeh from the lights behind; a rack focus
+   says what is sharp first and what is sharp after. Quiet shots move slowly or not at all.
 3. The frame as the shot starts, foreground, midground and background: every character and every
    element of the set that is visible, where it sits in the frame (left, centre or right third,
    top or bottom), its colour and material. Never a flat, empty background: name the foreground
