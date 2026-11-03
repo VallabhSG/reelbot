@@ -467,3 +467,8 @@ def test_the_critic_sees_the_place_and_the_start(take_series):
 def test_quiet_beats_are_held_and_rack_focus_is_a_move(take_series):
     sp = Planner(None, take_series).system_prompt()
     assert "STILL IS CLEAN" in sp and '"rack focus"' in sp and '"slow crane down"' in sp
+
+
+def test_a_caller_is_never_in_the_heros_room(take_series):
+    sp = Planner(None, take_series).system_prompt()
+    assert "NOBODY IS WHERE THEY CAN'T BE" in sp and "split screen" in sp

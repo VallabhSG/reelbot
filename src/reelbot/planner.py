@@ -90,7 +90,8 @@ Answer honestly, as a viewer, not as a writer:
   punchline that doesn't land, AND anything that makes no sense: the problem already solved at the
   start (the fix already in place or within reach in the place or the first frame), a prop that
   changes place or state with nobody touching it, an object that has nothing to do with this
-  story. Empty list if none.
+  story, a character somewhere they can't be (the person on the other end of a call standing in
+  the same room). Empty list if none.
 - clear: true only if you could retell the cause, the decisive action and the punchline.
 - score: 1-10 clarity.
 
@@ -199,6 +200,11 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
 - opening_frame: the very first frame as a still image: where each character is, pose, what is in
   frame, framing. It must match shot 1 and show EVERY character who appears anywhere in the episode
   (a small background presence is fine): the video is generated from this frame.
+  NOBODY IS WHERE THEY CAN'T BE: someone in another place (the caller on the other end of a phone
+  call, a crush across town) is never a background presence in the hero's room. Then the opening
+  frame is a split screen: the vertical frame divided diagonally, the hero in her place on one side
+  and the other person in theirs on the other, both lit the same way, and shot 1 is that split
+  screen; later shots cut between the two places.
 
 STORYBOARD RULES
 - Beats in order, each at least once, never going backwards: {beats}.
