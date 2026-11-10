@@ -37,8 +37,8 @@ def _job(app, status=JobStatus.AWAITING_REVIEW, **fields):
     return jid
 
 
-def _published(app, days_ago, media_id, watch_ms=None):
-    when = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(timespec="seconds")
+def _published(app, days_ago, media_id, watch_ms=None, at=None):
+    when = ((at or datetime.now(UTC)) - timedelta(days=days_ago)).isoformat(timespec="seconds")
     jid = _job(app, JobStatus.PUBLISHED, ig_media_id=media_id, publish_after=when)
     if watch_ms is not None:
         app.db.save_metrics(jid, media_id, {"views": 1000.0, "ig_reels_avg_watch_time": float(watch_ms)})
@@ -232,11 +232,11 @@ def test_reply_to_a_live_message_is_a_note_but_reply_to_review_edits_the_caption
 
 
 def test_weekly_report_once_on_sunday_evening(app):
-    _published(app, 2, "M1", 9000)
     learner = app.pipeline.learner
     sat = datetime(2026, 10, 31, 19, 0, tzinfo=IST)
     sun_noon = datetime(2026, 11, 1, 12, 0, tzinfo=IST)
     sun_eve = datetime(2026, 11, 1, 18, 30, tzinfo=IST)
+    _published(app, 2, "M1", 9000, at=sun_eve)  # posted that week, whatever today's date is
     assert not learner.weekly_report(sat) and not learner.weekly_report(sun_noon)
     assert learner.weekly_report(sun_eve)
     report = app.pipeline.notifier.sent[-1]

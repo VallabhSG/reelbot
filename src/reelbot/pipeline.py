@@ -934,7 +934,7 @@ class Pipeline:
         return caption
 
     # ================================================================== publishing
-    def publish(self, job_id: int) -> str:
+    def publish(self, job_id: int, now: datetime | None = None) -> str:
         job = self._require(job_id, JobStatus.APPROVED)
         self.db.update_job(job_id, status=JobStatus.PUBLISHING)
         try:
@@ -959,7 +959,7 @@ class Pipeline:
         self.db.update_job(job_id, status=JobStatus.PUBLISHED, ig_media_id=media_id)
         link = self.publisher.permalink(media_id) or media_id
         self.notifier.send_message(f"🚀 #{job_id} is live: {link}")
-        self.cross_post(job_id, after_publish=True)
+        self.cross_post(job_id, now, after_publish=True)
         return media_id
 
     # ---- cross-posting: the same reel on YouTube Shorts / Facebook right after Instagram. A failure
@@ -1089,7 +1089,7 @@ class Pipeline:
             )
             if ig_at <= now_iso:
                 try:
-                    published.append(self.publish(job["id"]))
+                    published.append(self.publish(job["id"], now))
                 except Exception:
                     log.exception("publish failed for job %s", job["id"])
             elif slots:  # a platform whose day comes before Instagram's this week
