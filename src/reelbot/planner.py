@@ -100,7 +100,8 @@ JSON only: {"summary": str, "confusions": [str], "clear": bool, "score": int}"""
 ENDING_TRIUMPH = (
     "ENDING for this episode: TRIUMPH. The twist beat is the hero's big, satisfying win landing in "
     "front of someone who doubted her or is watching (a jaw drop, a drink spilling), then her smug "
-    "face turned to the camera. No deadpan defeat this time."
+    "face turned to the camera. No deadpan defeat this time. That last shot's beat is still labelled "
+    '"twist" (never "triumph" or "victory").'
 )
 ENDING_DEADPAN = "ENDING for this episode: DEADPAN. The twist is the deadpan anticlimax."
 
@@ -208,6 +209,9 @@ HOW THE BEST REELS IN THIS FORMAT ARE BUILT
 
 STORYBOARD RULES
 - Beats in order, each at least once, never going backwards: {beats}.
+  "beat" is always exactly one of these five words: hook, escalate, clash, climax, twist. A quiet or
+  held shot keeps the beat it belongs to (the held beat before the punchline is the climax's last
+  shot or the twist's first), never "quiet", "pause" or "hold".
   hook = an instantly readable situation with stakes in the first second. Shot 1 starts ON MOTION
   or on a detail that asks a question (feet stepping out of a doorway, a hand grabbing keys, a
   phone lighting up at 2%, a clock at 6:59, a red F on a test). Never open on a static wide of
@@ -297,6 +301,14 @@ def episode_errors(episode: dict[str, Any]) -> list[Any]:
     except ValidationError as e:
         return [err for err in e.errors() if err["loc"] and err["loc"][0] != "shots"]
     return []
+
+
+def _got(err: Any) -> str:
+    """What the model actually wrote, so the retry knows which word to change."""
+    v = err.get("input") if isinstance(err, dict) else None
+    if isinstance(v, (str, int, float)) and not isinstance(v, bool) and err.get("type") != "missing":
+        return f" (you wrote {str(v)[:40]!r})"
+    return ""
 
 
 def has_shots(raw: object) -> bool:
@@ -481,7 +493,9 @@ class Planner:
                 plan = EpisodePlan.model_validate(raw)
             except ValidationError as e:
                 errors = e.errors()
-                feedback = "; ".join(f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in errors)
+                feedback = "; ".join(
+                    f"{'.'.join(map(str, err['loc']))}: {err['msg']}{_got(err)}" for err in errors
+                )
                 keys = sorted(raw) if isinstance(raw, dict) else type(raw).__name__
                 log.warning(
                     "plan attempt %d invalid: %s (answer had keys %s; starts %s)",

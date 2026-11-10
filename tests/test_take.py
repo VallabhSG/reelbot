@@ -314,6 +314,34 @@ def test_near_miss_shot_sizes_and_beats_are_accepted():
         ShotPlan(beat="hook", size="dutch tilt", **base)
 
 
+def test_a_shot_labelled_with_no_beat_takes_the_beat_before_it():
+    raw = _raw_plan()
+    beats = [s["beat"] for s in raw["shots"]]
+    raw["shots"][4]["beat"] = "quiet"  # the held beat before the punchline
+    assert [s.beat for s in EpisodePlan.model_validate(raw).shots] == beats[:4] + [beats[3], beats[5]]
+    raw = _raw_plan()
+    raw["shots"][-1]["beat"] = "pause"
+    raw["shots"][0].pop("beat")
+    got = [s.beat for s in EpisodePlan.model_validate(raw).shots]
+    assert got[0] == "hook" and got[-1] == "twist"
+    from reelbot.models import beat_name
+
+    for label, want in [
+        ("Victory", "twist"),
+        ("deadpan", "twist"),
+        ("climax-twist", "climax"),
+        ("hold", None),
+    ]:
+        assert beat_name(label) == want
+
+
+def test_a_bad_field_goes_back_with_what_the_model_wrote():
+    from reelbot.planner import _got
+
+    assert _got({"type": "literal_error", "input": "quiet"}) == " (you wrote 'quiet')"
+    assert _got({"type": "missing", "input": {"size": "WS"}}) == ""
+
+
 def test_a_missing_music_prompt_does_not_sink_the_plan():
     from reelbot.models import EpisodePlan
 

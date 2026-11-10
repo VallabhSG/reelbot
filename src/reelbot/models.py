@@ -66,7 +66,64 @@ BEAT_ALIASES = {
     "ending": "twist",
     "end": "twist",
     "outro": "twist",
+    "victory": "twist",
+    "triumph": "twist",
+    "deadpan": "twist",
+    "reveal": "twist",
+    "aftermath": "twist",
+    "tag": "twist",
+    "button": "twist",
+    "coda": "twist",
+    "epilogue": "twist",
+    "finale": "twist",
+    "stinger": "twist",
+    "showdown": "clash",
+    "confrontation": "clash",
+    "standoff": "clash",
+    "complication": "escalate",
+    "setback": "escalate",
+    "win": "climax",
 }
+
+
+def beat_name(v: object) -> str | None:
+    """The beat a planner label means, or None when it names none of them ("quiet", "pause")."""
+    if not isinstance(v, str):
+        return None
+    k = _key(v).lower()
+    if k in BEATS:
+        return k
+    if k in BEAT_ALIASES:
+        return BEAT_ALIASES[k]
+    found = [(k.find(b), b) for b in BEATS if b in k]  # "climax-twist", "mini clash"
+    return min(found)[1] if found else None
+
+
+def fill_beats(data: object) -> object:
+    """A shot labelled with something that is not a beat ("quiet", "hold", nothing at all) takes the
+    beat of the shot before it, so the order never goes backwards; the last shot is the twist.
+    On 10 Nov an unlisted beat on one shot failed all six plan attempts and lost the day."""
+    if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+        return data
+    shots = data["shots"]
+    if not all(isinstance(s, dict) for s in shots):
+        return data
+    names = [beat_name(s.get("beat")) for s in shots]
+    if all(names):
+        return data
+    out = []
+    for i, (s, name) in enumerate(zip(shots, names, strict=True)):
+        if name is None:
+            if i == len(shots) - 1:
+                name = "twist"
+            elif i == 0:
+                name = "hook"
+            else:
+                name = names[i - 1] or next((b for b in names[i + 1 :] if b), "escalate")
+            names[i] = name
+            s = {**s, "beat": name}
+        out.append(s)
+    return {**data, "shots": out}
 
 
 def _key(v: str) -> str:
@@ -94,8 +151,7 @@ class ShotPlan(BaseModel):
     @classmethod
     def _beat_alias(cls, v: object) -> object:
         if isinstance(v, str):
-            k = _key(v).lower()
-            return BEAT_ALIASES.get(k, k)
+            return beat_name(v) or _key(v).lower()
         return v
 
     angle: str = Field(min_length=3, description="eye level, low angle, high angle, overhead, POV, dutch")
@@ -145,7 +201,7 @@ class EpisodePlan(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _find_shots(cls, data: object) -> object:
-        return recover_shots(data)
+        return fill_beats(recover_shots(data))
 
     @model_validator(mode="before")
     @classmethod
